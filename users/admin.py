@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.utils.translation import gettext_lazy as _
-from users.models import Role, Permission, RolePermission, ExtendedPermissions, User
+from users.models import Role, Permission, RolePermission, ExtendedPermission, User
 
 admin.site.unregister(Group)
 
@@ -31,7 +31,7 @@ class RolePermissionAdmin(admin.ModelAdmin):
     ordering = ('-date_created',)
 
 
-@admin.register(ExtendedPermissions)
+@admin.register(ExtendedPermission)
 class ExtendedPermissionsAdmin(admin.ModelAdmin):
     list_display = ('user', 'permission', 'is_active', 'date_created')
     list_filter = ('is_active', 'permission')

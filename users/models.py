@@ -1,3 +1,4 @@
+import logging
 import random
 
 from django.contrib.auth.models import AbstractUser
@@ -7,6 +8,8 @@ from django.utils.translation import gettext_lazy as _
 
 from base.models import BaseModel, GenericBaseModel
 from users.manager import CustomUserManager
+
+logger = logging.getLogger(__name__)
 
 
 class Role(GenericBaseModel):
@@ -52,7 +55,7 @@ class RolePermission(BaseModel):
         ]
 
 
-class ExtendedPermissions(BaseModel):
+class ExtendedPermission(BaseModel):
     user = models.ForeignKey('users.User', null=True, blank=True, on_delete=models.CASCADE)
     permission = models.ForeignKey('users.Permission', null=True, blank=True, on_delete=models.CASCADE)
     is_active = models.BooleanField(default=True)
@@ -117,3 +120,35 @@ class User(BaseModel, AbstractUser):
         if not self.role:
             raise ValueError("User's role must be provided")
         super().save(*args, **kwargs)
+
+    @property
+    def permissions(self):
+        try:
+            if self.is_superuser:
+                # Return all permissions
+                return list(
+                    Permission.objects.filter(is_active=True).values_list("name", flat=True)
+                )
+
+            # Role-based permissions
+            role_permissions = RolePermission.objects.filter(
+                role=self.role,
+                permission__is_active=True,
+                is_active=True
+            ).values_list("permission__name", flat=True)
+
+            # Extended (user-specific) permissions
+            extended_permissions = ExtendedPermission.objects.filter(
+                user=self,
+                permission__is_active=True,
+                is_active=True
+            ).values_list("permission__name", flat=True)
+
+            # Combine both, remove duplicates
+            permissions = list(set(role_permissions).union(extended_permissions))
+
+            return permissions
+
+        except Exception as e:
+            logger.exception("User model - get_permissions exception: %s" % e)
+            return []
