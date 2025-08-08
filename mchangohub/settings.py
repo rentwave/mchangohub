@@ -37,6 +37,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'base',
+    'users',
 ]
 
 MIDDLEWARE = [
@@ -68,6 +70,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'mchangohub.wsgi.application'
+AUTH_USER_MODEL = "users.User"
 
 
 # Database
