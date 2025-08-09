@@ -6,7 +6,7 @@ from notifications.backend.notification_management_service import NotificationMa
 from notifications.models import Notification
 from users.backend.services import UserService, RoleService
 from users.models import User
-from utils.common import normalize_phone_number, set_update_fields, generate_random_pin
+from utils.common import normalize_phone_number, set_fields, generate_random_pin
 
 
 class UserManagementService:
@@ -86,11 +86,10 @@ class UserManagementService:
         }
 
         if user:
-            data = set_update_fields(fields, kwargs, instance=user)
-            UserService().update(pk=user.id, **data)
-            user.refresh_from_db()
+            data = set_fields(fields, kwargs, instance=user)
+            user = UserService().update(pk=user.id, **data)
         else:
-            data = set_update_fields(fields, kwargs)
+            data = set_fields(fields, kwargs)
             user = UserService().create(**data)
             if not user:
                 raise Exception("User not created")
@@ -133,13 +132,12 @@ class UserManagementService:
             "password": lambda v: v,
         }
 
-        data = set_update_fields(fields, kwargs, instance=user)
+        data = set_fields(fields, kwargs, instance=user)
 
         if not data:
             return user
 
         updated_user = UserService().update(pk=user.id, **data)
-        updated_user.refresh_from_db()
         return updated_user
 
     @staticmethod
@@ -171,7 +169,6 @@ class UserManagementService:
         :param credential: The credential to identify the user.
         :type credential: str
         :return: None
-        :rtype: None
         :raises Exception: If the user is not found.
         """
         user, _ = self.get_user_by_credential(credential)
@@ -198,7 +195,6 @@ class UserManagementService:
         :param user_id: The ID of the user.
         :type user_id: str
         :return: None
-        :rtype: None
         :raises Exception: If the user is not found.
         """
         user = UserService().get(id=user_id, is_active=True)
@@ -229,7 +225,6 @@ class UserManagementService:
         :param old_password: The current password for verification.
         :type old_password: str
         :return: None
-        :rtype: None
         :raises ValueError: If the user is not found or the old password is incorrect.
         """
         user = UserService().get(id=user_id, is_active=True)

@@ -148,7 +148,7 @@ def normalize_phone_number(phone, country_code=None, total_count=None):
     return ''
 
 
-def set_update_fields(fields, kwargs, instance=None):
+def set_fields(fields, kwargs, instance=None):
     """
     Build and return a dictionary of field values from `kwargs` or `instance`.
 

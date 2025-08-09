@@ -82,7 +82,6 @@ class AuthenticationManagementService:
         :param user_id: The ID of the user to log out.
         :type user_id: str
         :return: None
-        :rtype: None
         :raises ValueError: If the user is not found or inactive.
         """
         user = UserService().get(id=user_id, is_active=True)
