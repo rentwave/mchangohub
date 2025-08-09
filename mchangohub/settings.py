@@ -142,6 +142,9 @@ OTP_LENGTH = 4
 OTP_VALIDITY_SECONDS = 3600
 ACTION_OTP_VALIDITY_SECONDS = 360
 
+QUEUE_NOTIFICATIONS = False
+NOTIFY_BASE_URL = "https://notify.rentwaveafrica.co.ke"
+
 
 """ RabbitMQ configs """
 RABBITMQ_USER = os.environ.get('RABBITMQ_USER')
