@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.utils.translation import gettext_lazy as _
-from users.models import Role, Permission, RolePermission, ExtendedPermission, User
+from users.models import Role, Permission, RolePermission, ExtendedPermission, User, Device
 
 admin.site.unregister(Group)
 
@@ -50,7 +50,7 @@ class UserAdmin(BaseUserAdmin):
             )
         }),
         (_('Role & Permissions'), {
-            'fields': ('role', 'is_active', 'is_staff', 'is_superuser')
+            'fields': ('role', 'is_active', 'is_verified', 'is_staff', 'is_superuser')
         }),
         (_('Important dates'), {
             'fields': (
@@ -72,11 +72,24 @@ class UserAdmin(BaseUserAdmin):
 
     list_display = (
         'username', 'first_name', 'last_name', 'email', 'phone_number', 'role',
-        'is_superuser', 'is_active', 'date_modified',  'date_created'
+        'is_verified', 'is_superuser', 'is_active', 'date_modified',  'date_created'
     )
-    list_filter = ('is_active', 'is_staff', 'is_superuser', 'role')
+    list_filter = ('is_active', 'is_staff', 'is_superuser', 'is_verified', 'role')
     search_fields = ('username', 'email', 'first_name', 'last_name', 'phone_number', 'id_number')
     readonly_fields = ('last_login', 'last_activity', 'date_created', 'date_modified')
     ordering = ('-date_created',)
+
+
+@admin.register(Device)
+class DeviceAdmin(admin.ModelAdmin):
+    list_display = ('user', 'token', 'is_active', 'last_activity', 'date_created')
+    list_filter = ('is_active', 'last_activity', 'date_created')
+    search_fields = (
+        'token', 'user__username', 'user__id_number', 'user__phone_number', 'user__email',
+        'user__first_name', 'user__last_name'
+    )
+    readonly_fields = ('last_activity', 'date_created', 'date_modified')
+    ordering = ('-date_created',)
+
 
 

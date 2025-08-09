@@ -1,5 +1,5 @@
-from users.models import Role, Permission, RolePermission, ExtendedPermission, User
-from utilities.service_base import ServiceBase
+from users.models import Role, Permission, RolePermission, ExtendedPermission, User, Device
+from utils.service_base import ServiceBase
 
 
 class RoleService(ServiceBase):
@@ -20,3 +20,7 @@ class ExtendedPermissionService(ServiceBase):
 
 class UserService(ServiceBase):
     manager = User.objects
+
+
+class DeviceService(ServiceBase):
+    manager = Device.objects

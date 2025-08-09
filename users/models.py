@@ -84,6 +84,7 @@ class User(BaseModel, AbstractUser):
     gender = models.CharField(max_length=100, choices=Gender.choices, default=Gender.OTHER)
     dob = models.DateTimeField(null=True, blank=True)
     role = models.ForeignKey('users.Role', on_delete=models.CASCADE)
+    is_verified = models.BooleanField(default=True)
     last_activity = models.DateTimeField(null=True, blank=True, editable=False)
 
     manager = CustomUserManager()
@@ -152,3 +153,25 @@ class User(BaseModel, AbstractUser):
         except Exception as e:
             logger.exception("User model - get_permissions exception: %s" % e)
             return []
+
+
+class Device(BaseModel):
+    user = models.ForeignKey('users.User', on_delete=models.CASCADE)
+    token = models.CharField(max_length=255)
+    last_activity = models.DateTimeField(null=True, blank=True, editable=False)
+    is_active = models.BooleanField(default=True)
+
+    SYNC_MODEL = False
+
+    def __str__(self):
+        status = "Active" if self.is_active else "Inactive"
+        return f"{self.user.username} ({status})"
+
+    class Meta(object):
+        ordering = ('-date_created',)
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'token'], name='unique_user_token')
+        ]
+        indexes = [
+            models.Index(fields=['token']),
+        ]
