@@ -50,7 +50,7 @@ class UserAPIHandler:
         """
         try:
             user = UserManagementService().create_user(**request.data)
-            return ResponseProvider.success(message="User created successfully", data={"user_id": str(user.id)})
+            return ResponseProvider.created(message="User created successfully", data={"user_id": str(user.id)})
         except Exception as ex:
             logger.exception(f"UserAPIHandler - create_user exception: {ex}")
             return ResponseProvider.error(message="An error occurred while creating the user", error=str(ex))
@@ -231,7 +231,7 @@ class UserAPIHandler:
                 user_id=user_id,
                 device_token=device_token,
             )
-            return ResponseProvider.success(message="Device created successfully", data={"device_id": str(device.id)})
+            return ResponseProvider.created(message="Device created successfully", data={"device_id": str(device.id)})
         except Exception as ex:
             logger.exception("UserAPIHandler - create_device exception: %s", ex)
             return ResponseProvider.error(message="An error occurred while creating a device", error=str(ex))

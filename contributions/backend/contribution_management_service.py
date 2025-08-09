@@ -1,9 +1,11 @@
 from django.forms.models import model_to_dict
 from django.utils import timezone
 from django.db.models import Q, QuerySet
+from django.db import transaction
 
 from contributions.backend.services import ContributionService
 from contributions.models import Contribution
+from notifications.backend.notification_management_service import NotificationManagementService
 from users.models import User
 from utils.common import normalize_phone_number
 
@@ -11,6 +13,7 @@ from utils.common import normalize_phone_number
 class ContributionManagementService:
     REQUIRED_FIELDS = ['name', 'target_amount', 'end_date']
 
+    @transaction.atomic
     def create_contribution(self, user: User, **kwargs) -> Contribution:
         """
         Create a new contribution entry.
@@ -28,36 +31,53 @@ class ContributionManagementService:
             if not kwargs.get(field):
                 raise ValueError(f"{field.replace('_', ' ').title()} must be provided")
 
-        if ContributionService().filter(creator=user, name=kwargs.get('name')).exists():
+        name = str(kwargs.get('name')).strip().title()
+        description = str(kwargs.get('description', '')).strip().capitalize()
+        target_amount = float(str(kwargs.get('target_amount')).strip())
+        end_date = str(kwargs.get('end_date')).strip()
+
+        if ContributionService().filter(creator=user, name=name).exists():
             raise ValueError('Name already exists')
 
         contribution = ContributionService().create(
-            name=kwargs.get('name').title(),
-            description=kwargs.get('description', '').capitalize(),
-            target_amount=kwargs.get('target_amount'),
-            end_date=kwargs.get('end_date'),
+            name=name,
+            description=description,
+            target_amount=target_amount,
+            end_date=end_date,
             creator=user
         )
         if contribution is None:
             raise Exception('Contribution not created')
 
         phone_numbers = kwargs.get('phone_numbers', [])
+        phone_numbers = [normalize_phone_number(phone=phone) for phone in phone_numbers]
         if phone_numbers:
-            phone_numbers = [normalize_phone_number(phone=phone) for phone in phone_numbers]
-            # TODO: Handle invitation logic
+            NotificationManagementService(None).send_to_recipients(
+                recipients=phone_numbers,
+                template='contribution_invitation',
+                context={
+                    'contribution_name': contribution.name,
+                    'target_amount': contribution.target_amount,
+                    'end_date': contribution.end_date.strftime('%Y-%m-%d'),
+                    'creator_name': user.full_name
+                },
+            )
 
         return contribution
 
     @staticmethod
-    def update_contribution(contribution_id: str, **kwargs) -> Contribution:
+    def update_contribution(user: User, contribution_id: str, **kwargs) -> Contribution:
         """
-        Update fields of a contribution by its ID.
+        Update fields of a contribution identified by its ID.
 
-        :param contribution_id: The UUID or string ID of the contribution.
+        :param user: The user attempting the update; must be the creator.
+        :type user: User
+        :param contribution_id: The UUID or string identifier of the contribution.
         :type contribution_id: str
-        :param kwargs: Fields and values to update.
+        :param kwargs: Fields and their new values to update on the contribution.
         :type kwargs: dict
-        :raises ValueError: If contribution is not found.
+        :raises ValueError: If the contribution is not found or user lacks permission.
+        :raises Exception: If the update operation fails.
         :return: The updated Contribution instance.
         :rtype: Contribution
         """
@@ -65,11 +85,13 @@ class ContributionManagementService:
         if contribution is None:
             raise ValueError('Contribution not found')
 
-        for field, value in kwargs.items():
-            if hasattr(contribution, field) and value is not None:
-                setattr(contribution, field, value)
+        if not user == contribution.creator:
+            raise ValueError('You do not have permission to update this contribution')
 
-        contribution.save()
+        contribution = ContributionService().update(pk=contribution.id, **kwargs)
+        if contribution is None:
+            raise Exception('Failed to update contribution')
+
         return contribution
 
     @staticmethod
@@ -97,19 +119,24 @@ class ContributionManagementService:
         return contribution
 
     @staticmethod
-    def delete_contribution(contribution_id: str) -> Contribution:
+    def delete_contribution(user: User, contribution_id: str) -> Contribution:
         """
-        Soft-delete a contribution by setting its status to INACTIVE.
+        Soft-delete a contribution by marking its status as INACTIVE.
 
-        :param contribution_id: The UUID or string ID of the contribution.
+        :param user: The user attempting to delete; must be the creator.
+        :type user: User
+        :param contribution_id: The UUID or string identifier of the contribution.
         :type contribution_id: str
-        :raises ValueError: If contribution is not found.
-        :return: The contribution instance marked inactive.
+        :raises ValueError: If the contribution is not found or user lacks permission.
+        :return: The contribution instance marked as inactive.
         :rtype: Contribution
         """
         contribution = ContributionService().get(id=contribution_id)
         if contribution is None:
             raise ValueError('Contribution not found')
+
+        if not user == contribution.creator:
+            raise ValueError('You do not have permission to delete this contribution')
 
         contribution.status = Contribution.Status.INACTIVE
         contribution.save()

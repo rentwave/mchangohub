@@ -20,12 +20,12 @@ class NotificationManagementService:
     Manages creation, deduplication, and dispatch of notifications for a given user.
     """
 
-    def __init__(self, user: User):
+    def __init__(self, user: Optional[User]):
         """
-        Initialize the service with the target user.
+        Initialize the service with an optional target user.
 
-        :param user: The user who will receive notifications.
-        :type user: User
+        :param user: The user who will receive notifications, or None when sending to arbitrary recipients.
+        :type user: Optional[User]
         """
         self.user = user
 
@@ -45,7 +45,7 @@ class NotificationManagementService:
             key_string = f"{self.user.id}_{notification_key}_{today.year}_{today.month}"
         elif frequency == 'weekly':
             year, week_num, _ = today.isocalendar()
-            key_string = f"{self.user.id}_{notification_key}_{year}_W{week_num}"
+            key_string = f"{self.user.id}_{notification_key}_{year}_{week_num}"
         elif frequency == 'daily':
             key_string = f"{self.user.id}_{notification_key}_{today.date()}"
         else:
@@ -164,22 +164,69 @@ class NotificationManagementService:
 
         notification_data = {
             "unique_identifier": str(notification.id),
-            "system": "mcnangohub",
+            "system": "mchangohub",
             "recipients": [recipient],
             "notification_type": notification.delivery_method,
             "template": template,
             "context": context,
         }
 
-        if settings.QUEUE_NOTIFICATIONS:
-            self._queue_notification(notification_data)
-        else:
-            self._make_request(notification_data)
+        self._send_or_queue(notification_data)
 
         notification.status = Notification.Status.QUEUED
         notification.save()
 
         return notification
+
+    def send_to_recipients(
+            self,
+            recipients: list[str],
+            context: dict,
+            delivery_method: str = Notification.DeliveryMethods.SMS,
+            template: str = "sms_default"
+    ) -> None:
+        """
+        Send a notification directly to a list of recipients without associating with a User.
+
+        :param recipients: List of recipient identifiers (phone numbers, emails, or device tokens).
+        :type recipients: list[str]
+        :param context: Variables to populate the notification template.
+        :type context: dict
+        :param delivery_method: Delivery method (e.g., PUSH, SMS, EMAIL).
+        :type delivery_method: str
+        :param template: Identifier for the notification template to use.
+        :type template: str
+        :raises ValueError: If delivery method is invalid or the recipients' list is empty.
+        """
+        delivery_method = delivery_method.upper()
+        if delivery_method not in Notification.DeliveryMethods.values:
+            raise ValueError("Invalid delivery method")
+
+        if not recipients:
+            raise ValueError("Recipients list cannot be empty")
+
+        notification_data = {
+            "unique_identifier": "",
+            "system": "mchangohub",
+            "recipients": recipients,
+            "notification_type": delivery_method,
+            "template": template,
+            "context": context,
+        }
+
+        self._send_or_queue(notification_data)
+
+    def _send_or_queue(self, notification_data: dict) -> None:
+        """
+        Send or queue the notification payload based on the system settings.
+
+        :param notification_data: The notification payload dictionary to send or queue.
+        :type notification_data: dict
+        """
+        if settings.QUEUE_NOTIFICATIONS:
+            self._queue_notification(notification_data)
+        else:
+            self._make_request(notification_data)
 
     @staticmethod
     def _queue_notification(data: dict):

@@ -22,7 +22,7 @@ class ContributionAPIHandler:
         try:
             user = request.user
             contribution = ContributionManagementService().create_contribution(user=user, **request.data)
-            return ResponseProvider.success(
+            return ResponseProvider.created(
                 message="Contribution created successfully",
                 data={"contribution_id": str(contribution.id)}
             )
@@ -42,8 +42,13 @@ class ContributionAPIHandler:
         :rtype: JsonResponse
         """
         try:
+            user = request.user
             contribution_id = request.data.get("contribution_id", "")
-            ContributionManagementService().update_contribution(contribution_id=contribution_id, **request.data)
+            ContributionManagementService().update_contribution(
+                user=user,
+                contribution_id=contribution_id,
+                **request.data
+            )
             return ResponseProvider.success(message="Contribution updated successfully")
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - update_contribution exception: {ex}")
@@ -61,8 +66,12 @@ class ContributionAPIHandler:
         :rtype: JsonResponse
         """
         try:
+            user = request.user
             contribution_id = request.data.get("contribution_id", "")
-            ContributionManagementService().delete_contribution(contribution_id=contribution_id)
+            ContributionManagementService().delete_contribution(
+                user=user,
+                contribution_id=contribution_id
+            )
             return ResponseProvider.success(message="Contribution deleted successfully")
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - delete_contribution exception: {ex}")
@@ -102,10 +111,10 @@ class ContributionAPIHandler:
         try:
             filters = {
                 "search_term": request.data.get("search_term", ""),
-                "creator_id": request.data.get("creator_id"),
-                "status": request.data.get("status"),
-                "start_date": request.data.get("start_date"),
-                "end_date": request.data.get("end_date"),
+                "creator_id": request.data.get("creator_id", ""),
+                "status": request.data.get("status", ""),
+                "start_date": request.data.get("start_date", ""),
+                "end_date": request.data.get("end_date", ""),
             }
             contributions = ContributionManagementService().filter_contributions(**filters)
             return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
