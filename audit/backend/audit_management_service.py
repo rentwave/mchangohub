@@ -25,9 +25,7 @@ class AuditManagementService:
         try:
             log = AuditLogService().create(
                 action=action,
-                api_client=getattr(request, "api_client", None),
                 user=getattr(request, "user", None),
-                system=getattr(request, "system", None),
                 ip_address=getattr(request, "source_ip", None),
                 request_path=request.path,
                 request_method=request.method,
