@@ -1,5 +1,6 @@
 from django.db.models import Q, QuerySet
 from django.db import transaction
+from django.db.models.expressions import F
 from django.forms import model_to_dict
 
 from notifications.backend.notification_management_service import NotificationManagementService
@@ -274,6 +275,7 @@ class UserManagementService:
         user_dict["id"] = str(user.id)
         user_dict["role_name"] = user.role.name
         user_dict["permissions"] = user.permissions
+        user_dict.pop("password", None)
 
         return user_dict
 
@@ -328,7 +330,7 @@ class UserManagementService:
         if is_superuser is not None:
             filters &= Q(is_superuser=is_superuser)
 
-        users = UserService().filter(filters)
+        users = UserService().filter(filters).annotate(role_name=F("role__name"))
 
         if queryset:
             return users

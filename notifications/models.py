@@ -45,4 +45,4 @@ class Notification(BaseModel):
         ordering = ('-date_created',)
 
     def _str_(self):
-        return '%s - %s' % (self.user.username, self.delivery_method)
+        return '%s - %s' % (self.user, self.delivery_method)

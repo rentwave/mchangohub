@@ -105,6 +105,7 @@ class User(BaseModel, AbstractUser):
         self.last_activity = timezone.now()
         self.save()
 
+    @property
     def full_name(self):
         return "%s %s %s" % (self.first_name, self.other_name, self.last_name)
 
@@ -117,7 +118,7 @@ class User(BaseModel, AbstractUser):
 
     def save(self, *args, **kwargs):
         if not self.username:
-            self.username = self.generate_username(self.first_name or self.last_name or "user")
+            self.username = self.generate_username(self.last_name or self.first_name or "user")
         if not self.role:
             raise ValueError("User's role must be provided")
         super().save(*args, **kwargs)

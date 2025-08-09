@@ -1,3 +1,4 @@
+from dateutil.parser import parse
 from django.forms.models import model_to_dict
 from django.utils import timezone
 from django.db.models import Q, QuerySet
@@ -11,6 +12,7 @@ from utils.common import normalize_phone_number
 
 
 class ContributionManagementService:
+
     REQUIRED_FIELDS = ['name', 'target_amount', 'end_date']
 
     @transaction.atomic
@@ -19,25 +21,33 @@ class ContributionManagementService:
         Create a new contribution entry.
 
         :param user: The creator User instance.
-        :type user: User
         :param kwargs: Required fields: name, target_amount, end_date; optional: description, phone_numbers.
-        :type kwargs: dict
-        :raises ValueError: If required fields are missing or contribution name already exists.
+        :raises ValueError: If required fields are missing, or contribution name already exists.
         :raises Exception: If contribution creation fails.
         :return: The created Contribution instance.
-        :rtype: Contribution
         """
-        for field in self.REQUIRED_FIELDS:
-            if not kwargs.get(field):
-                raise ValueError(f"{field.replace('_', ' ').title()} must be provided")
+        # Validate required fields presence
+        missing = [f for f in self.REQUIRED_FIELDS if not kwargs.get(f)]
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
-        name = str(kwargs.get('name')).strip().title()
-        description = str(kwargs.get('description', '')).strip().capitalize()
-        target_amount = float(str(kwargs.get('target_amount')).strip())
-        end_date = str(kwargs.get('end_date')).strip()
+        # Normalize inputs
+        name = str(kwargs.get("name")).strip().title()
+        description = str(kwargs.get("description", "")).strip().capitalize()
 
+        try:
+            target_amount = float(str(kwargs.get("target_amount")).strip())
+        except (ValueError, TypeError):
+            raise ValueError("Invalid target amount")
+
+        try:
+            end_date = parse(str(kwargs.get("end_date")))
+        except (ValueError, TypeError):
+            raise ValueError("Invalid end date")
+
+        # Check the uniqueness of contribution name for this user
         if ContributionService().filter(creator=user, name=name).exists():
-            raise ValueError('Name already exists')
+            raise ValueError("Contribution name already exists")
 
         contribution = ContributionService().create(
             name=name,
@@ -46,54 +56,80 @@ class ContributionManagementService:
             end_date=end_date,
             creator=user
         )
-        if contribution is None:
-            raise Exception('Contribution not created')
+        if not contribution:
+            raise Exception("Contribution not created")
 
-        phone_numbers = kwargs.get('phone_numbers', [])
-        phone_numbers = [normalize_phone_number(phone=phone) for phone in phone_numbers]
-        if phone_numbers:
+        # Normalize phone numbers and send notifications if any
+        phone_numbers = kwargs.get("phone_numbers", [])
+        normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
+        if normalized_phones:
             NotificationManagementService(None).send_to_recipients(
-                recipients=phone_numbers,
-                template='sms_contribution_invitation',
+                recipients=normalized_phones,
+                template="sms_contribution_invitation",
                 context={
-                    'contribution_name': contribution.name,
-                    'target_amount': contribution.target_amount,
-                    'end_date': contribution.end_date.strftime('%Y-%m-%d'),
-                    'creator_name': user.full_name,
-                    'contribution_link': f'https://machangohub.com/contributions/{contribution.id}'
+                    "contribution_name": contribution.name,
+                    "target_amount": contribution.target_amount,
+                    "end_date": contribution.end_date.strftime("%Y-%m-%d"),
+                    "creator_name": user.full_name,
+                    "contribution_link": f"https://mchangohub.com/contributions/{contribution.id}",
                 },
             )
 
         return contribution
 
-    @staticmethod
-    def update_contribution(user: User, contribution_id: str, **kwargs) -> Contribution:
+    @transaction.atomic
+    def update_contribution(self, user: User, contribution_id: str, **kwargs) -> Contribution:
         """
         Update fields of a contribution identified by its ID.
 
         :param user: The user attempting the update; must be the creator.
-        :type user: User
         :param contribution_id: The UUID or string identifier of the contribution.
-        :type contribution_id: str
         :param kwargs: Fields and their new values to update on the contribution.
-        :type kwargs: dict
-        :raises ValueError: If the contribution is not found or user lacks permission.
+        :raises ValueError: If the contribution is not found, user lacks permission, or new name duplicates existing.
         :raises Exception: If the update operation fails.
         :return: The updated Contribution instance.
-        :rtype: Contribution
         """
         contribution = ContributionService().get(id=contribution_id)
         if contribution is None:
-            raise ValueError('Contribution not found')
+            raise ValueError("Contribution not found")
 
-        if not user == contribution.creator:
-            raise ValueError('You do not have permission to update this contribution')
+        if user != contribution.creator:
+            raise ValueError("You do not have permission to update this contribution")
 
-        contribution = ContributionService().update(pk=contribution.id, **kwargs)
-        if contribution is None:
-            raise Exception('Failed to update contribution')
+        # Normalize fields in kwargs if present
+        normalized_data = {}
 
-        return contribution
+        if "name" in kwargs:
+            new_name = str(kwargs["name"]).strip().title()
+            # Check if the new name already exists for user excluding current contribution
+            exists = ContributionService().filter(
+                creator=user,
+                name=new_name
+            ).exclude(id=contribution.id).exists()
+            if exists:
+                raise ValueError("Contribution name already exists")
+            normalized_data["name"] = new_name
+
+        if "description" in kwargs:
+            normalized_data["description"] = str(kwargs["description"]).strip().capitalize()
+
+        if "target_amount" in kwargs:
+            try:
+                normalized_data["target_amount"] = float(str(kwargs["target_amount"]).strip())
+            except (ValueError, TypeError):
+                raise ValueError("Invalid target amount")
+
+        if "end_date" in kwargs:
+            try:
+                normalized_data["end_date"] = parse(str(kwargs["end_date"]))
+            except (ValueError, TypeError):
+                raise ValueError("Invalid end date")
+
+        updated_contribution = ContributionService().update(pk=contribution.id, **normalized_data)
+        if not updated_contribution:
+            raise Exception("Failed to update contribution")
+
+        return updated_contribution
 
     @staticmethod
     def update_contribution_status(contribution_id: str) -> Contribution:
@@ -211,7 +247,7 @@ class ContributionManagementService:
             filters &= Q(creator__id=creator_id)
 
         if status:
-            filters &= Q(status=status)
+            filters &= Q(status=status.upper())
 
         if start_date:
             filters &= Q(date_created__date__gte=start_date)

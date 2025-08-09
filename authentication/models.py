@@ -22,7 +22,7 @@ class Identity(BaseModel):
         EXPIRED = "EXPIRED", _("Expired")
 
     user = models.ForeignKey('users.User', on_delete=models.CASCADE)
-    device = models.ForeignKey('users.Device', on_delete=models.CASCADE)
+    device = models.ForeignKey('users.Device', null=True, blank=True, on_delete=models.CASCADE)
     token = models.CharField(max_length=200)
     expires_at = models.DateTimeField()
     source_ip = models.GenericIPAddressField(null=True, blank=True)

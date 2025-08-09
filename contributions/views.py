@@ -43,7 +43,7 @@ class ContributionAPIHandler:
         """
         try:
             user = request.user
-            contribution_id = request.data.get("contribution_id", "")
+            contribution_id = request.data.pop("contribution_id", "")
             ContributionManagementService().update_contribution(
                 user=user,
                 contribution_id=contribution_id,

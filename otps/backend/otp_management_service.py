@@ -73,29 +73,33 @@ class OTPManagementService:
         :raises ValueError: If required parameters are missing or invalid.
         :raises Exception: If identity, user, or OTP creation fails.
         """
-        if purpose not in OTP.PurposeTypes.values:
-            raise ValueError("Invalid purpose")
-
-        identity = None
-        if purpose == OTP.PurposeTypes.TWO_FACTOR_AUTHENTICATION:
-            if not token:
-                raise ValueError("Token must be provided for 2FA purpose")
-            identity = IdentityService().filter(
-                token=token,
-                status=Identity.Status.ACTIVATION_PENDING,
-                expires_at__gte=timezone.now(),
-            ).first()
-            if identity is None:
-                raise Exception("Identity not found")
-
         if delivery_method not in OTP.DeliveryMethods.values:
             raise ValueError("Invalid delivery method")
+
+        if purpose not in OTP.PurposeTypes.values:
+            raise ValueError("Invalid purpose")
 
         user = None
         if user_id:
             user = UserService().get(id=user_id, is_active=True)
             if user is None:
                 raise Exception("User not found")
+
+        identity = None
+        if purpose == OTP.PurposeTypes.TWO_FACTOR_AUTHENTICATION:
+            if not token:
+                raise ValueError("Token must be provided for 2FA purpose")
+
+            identity = IdentityService().filter(
+                token=token,
+                status=Identity.Status.ACTIVATION_PENDING,
+                expires_at__gte=timezone.now(),
+            ).first()
+
+            if identity is None:
+                raise Exception("Identity not found")
+
+            user = identity.user
 
         if not contact:
             if not user:
@@ -124,11 +128,19 @@ class OTPManagementService:
         if otp is None:
             raise Exception("OTP not created due to a database exception")
 
-        NotificationManagementService(user).send_notification(
-            delivery_method=delivery_method,
-            template=f"{delivery_method.lower()}_otp",
-            context={"otp": raw_code},
-        )
+        if user:
+            NotificationManagementService(user).send_notification(
+                delivery_method=delivery_method,
+                template=f"{delivery_method.lower()}_otp",
+                context={"otp": raw_code},
+            )
+        else:
+            NotificationManagementService(None).send_to_recipients(
+                recipients=[contact],
+                delivery_method=delivery_method,
+                template=f"{delivery_method.lower()}_otp",
+                context={"otp": raw_code},
+            )
 
         return otp
 
@@ -173,6 +185,7 @@ class OTPManagementService:
         if purpose == OTP.PurposeTypes.TWO_FACTOR_AUTHENTICATION:
             if not token:
                 raise ValueError("Token must be provided for 2FA purpose")
+
             identity = IdentityService().get(token=token, expires_at__gte=timezone.now())
             if identity is None:
                 raise Exception("Identity not found or expired")

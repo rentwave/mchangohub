@@ -56,6 +56,9 @@ class AuthenticationManagementService:
                 device=device,
                 status = status,
             )
+            if identity is None:
+                raise Exception("Identity not created")
+
             if status == Identity.Status.ACTIVATION_PENDING:
                 OTPManagementService().send_otp(
                     purpose=OTP.PurposeTypes.TWO_FACTOR_AUTHENTICATION,

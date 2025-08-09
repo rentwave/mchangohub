@@ -68,7 +68,7 @@ class UserAPIHandler:
         :raises Exception: If the update fails.
         """
         try:
-            user_id = request.data.get("user_id", "")
+            user_id = request.data.get("user_id", request.user.id)
             UserManagementService().update_user(user_id=user_id, **request.data)
             return ResponseProvider.success(message="User updated successfully")
         except Exception as ex:
@@ -88,8 +88,7 @@ class UserAPIHandler:
         :raises Exception: If the deletion fails.
         """
         try:
-            user_id = request.data.get("user_id", "")
-            UserManagementService().delete_user(user_id=user_id)
+            UserManagementService().delete_user(user_id=request.user.id)
             return ResponseProvider.success(message="User deleted successfully")
         except Exception as ex:
             logger.exception(f"UserAPIHandler - delete_user exception: {ex}")
@@ -148,7 +147,7 @@ class UserAPIHandler:
         :raises Exception: If password change fails.
         """
         try:
-            user_id = request.data.get("user_id", "")
+            user_id = request.user.id
             old_password = request.data.get("old_password", "")
             new_password = request.data.get("new_password", "")
             UserManagementService().change_password(
@@ -174,7 +173,7 @@ class UserAPIHandler:
         :raises Exception: If the user is not found or retrieval fails.
         """
         try:
-            user_id = request.data.get("user_id", "")
+            user_id = request.data.get("user_id", request.user.id)
             user_data = UserManagementService().get_user(user_id=user_id)
             if not user_data:
                 raise Exception("User not found")
