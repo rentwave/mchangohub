@@ -39,11 +39,12 @@ class ServiceBase:
 
         :return: Model instance or None.
         """
+        #noinspection PyBroadException
         try:
             if self.manager is not None:
                 return self.manager.get(*args, **kwargs)
         except Exception as e:
-            logger.exception('%sService get exception: %s', self.manager.model.__name__, e)
+            pass
         return None
 
     def filter(self, *args, **kwargs):

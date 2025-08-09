@@ -6,7 +6,7 @@ from notifications.backend.notification_management_service import NotificationMa
 from notifications.models import Notification
 from users.backend.services import UserService, RoleService
 from users.models import User
-from utils.common import normalize_phone_number, set_fields, generate_random_pin
+from utils.common import normalize_phone_number, generate_random_pin
 
 
 class UserManagementService:
@@ -15,7 +15,7 @@ class UserManagementService:
     deletion, password resets, and retrieval.
     """
 
-    REQUIRED_FIELDS = ["phone_number", "password"]
+    REQUIRED_FIELDS = ["phone_number"]
     UNIQUE_FIELDS = ["username", "id_number", "email", "phone_number"]
 
     def get_user_by_credential(self, credential: str) -> tuple[User | None, str | None]:
@@ -43,63 +43,77 @@ class UserManagementService:
 
         return user, None
 
-    def create_user(self, **kwargs) -> User:
+    def create_user(self, active_user: bool = True, **kwargs) -> User:
         """
-        Create a new user or update an existing one based on phone number.
-        Ensures required fields, uniqueness, and applies value transformations.
+        Create or update a user based on phone number.
+        Validates required fields and uniqueness, applies value transformations explicitly.
 
+        :param active_user: Whether to activate the user upon creation.
         :param kwargs: User attributes.
         :return: Created or updated User instance.
         :raises ValueError: If required fields are missing or uniqueness is violated.
-        :raises Exception: If user creation fails.
+        :raises UserCreationError: If user creation or update fails.
         """
-        # Ensure required fields are present
-        for field in self.REQUIRED_FIELDS:
-            if not kwargs.get(field):
-                raise ValueError(f"{field.replace('_', ' ').title()} must be provided")
+        # Validate required fields presence
+        missing_fields = [field for field in self.REQUIRED_FIELDS if not kwargs.get(field)]
+        if missing_fields:
+            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
-        user = UserService().get(phone_number=kwargs.get("phone_number"))
-        user_id = user.id if user else None
+        # Normalize and clean input data
+        data = {k: v for k, v in kwargs.items() if v is not None and v != ""}
+        data["phone_number"] = normalize_phone_number(data["phone_number"])
+        data["role"] = RoleService().get(name="USER", is_active=True)
 
-        # Ensure uniqueness for specified fields
+        if "email" in data:
+            data["email"] = data["email"].lower()
+        if "other_phone_number" in data:
+            data["other_phone_number"] = normalize_phone_number(data["other_phone_number"])
+        if "gender" in data:
+            data["gender"] = data["gender"].upper()
+        if "id_number" in data:
+            data["id_number"] = data["id_number"].strip()
+        for name_field in ("first_name", "last_name", "other_name"):
+            if name_field in data:
+                data[name_field] = data[name_field].title()
+
+        # Check if a user with phone_number exists
+        existing_user = UserService().get(phone_number=data["phone_number"])
+        if existing_user and existing_user.is_active:
+            raise Exception("Phone number already registered")
+
+        user_id = existing_user.id if existing_user else None
+
+        # Check uniqueness for unique fields
         for field in self.UNIQUE_FIELDS:
-            if field in kwargs and kwargs[field]:
-                query = Q(**{field: kwargs[field]})
+            val = data.get(field)
+            if val:
+                query = Q(**{field: val})
                 if user_id:
                     query &= ~Q(id=user_id)
-                existing_user = UserService().filter(query).first()
-                if existing_user:
+                if UserService().filter(query).exists():
                     raise ValueError(f"{field.replace('_', ' ').title()} already exists")
 
-        fields = {
-            "phone_number": lambda v: normalize_phone_number(phone=v),
-            "email": lambda v: v.lower(),
-            "id_number": lambda v: v,
-            "other_phone_number": normalize_phone_number,
-            "first_name": lambda v: v.title(),
-            "last_name": lambda v: v.title(),
-            "other_name": lambda v: v.title(),
-            "gender": lambda v: v.upper(),
-            "dob": lambda v: v,
-            "role": lambda v: RoleService().get(name="USER", is_active=True),
-            "password": lambda v: v,
-        }
-
-        if user:
-            data = set_fields(fields, kwargs, instance=user)
-            user = UserService().update(pk=user.id, **data)
-        else:
-            data = set_fields(fields, kwargs)
-            user = UserService().create(**data)
+        # Create or update user
+        if existing_user:
+            user = UserService().update(pk=user_id, **data, is_active=active_user)
             if not user:
-                raise Exception("User not created")
+                raise Exception("User update failed")
+        else:
+            user = UserService().create(**data, is_active=active_user)
+            if not user:
+                raise Exception("User creation failed")
+
+        # Set password
+        password = data.pop("password", None) or generate_random_pin()
+        user.set_password(password)
+        user.save()
 
         return user
 
     def update_user(self, user_id: str, **kwargs) -> User:
         """
         Update an existing user with provided fields.
-        Ensures uniqueness and applies transformations.
+        Ensures uniqueness, filters out empty or None values, and applies normalization.
 
         :param user_id: The ID of the user to update.
         :param kwargs: Fields to update.
@@ -110,34 +124,36 @@ class UserManagementService:
         if not user:
             raise ValueError("User does not exist")
 
-        # Ensure uniqueness for provided fields
+        # Filter out empty or None values
+        data = {k: v for k, v in kwargs.items() if v}
+        data.pop("password", None)  # The password should not be updated here
+        data.pop("phone_number", None)  # Phone number should be handled separately
+
+        # Apply normalization
+        if "other_phone_number" in data:
+            data["other_phone_number"] = normalize_phone_number(data["other_phone_number"])
+        if "email" in data:
+            data["email"] = data["email"].lower()
+        if "id_number" in data:
+            data["id_number"] = kwargs["id_number"].strip()
+        if "gender" in data:
+            data["gender"] = data["gender"].upper()
+        for name_field in ("first_name", "last_name", "other_name"):
+            if name_field in data:
+                data[name_field] = data[name_field].title()
+
+        # Check uniqueness for provided fields
         for field in self.UNIQUE_FIELDS:
-            if field in kwargs and kwargs[field]:
-                existing_user = UserService().filter(
-                    Q(**{field: kwargs[field]}) & ~Q(id=user.id)
-                ).first()
+            val = data.get(field, None)
+            if val:
+                existing_user = UserService().filter(Q(**{field: val}) & ~Q(id=user.id)).first()
                 if existing_user:
                     raise ValueError(f"{field.replace('_', ' ').title()} already exists")
 
-        fields = {
-            "phone_number": normalize_phone_number,
-            "email": lambda v: v.lower(),
-            "id_number": lambda v: v,
-            "other_phone_number": normalize_phone_number,
-            "first_name": lambda v: v.title(),
-            "last_name": lambda v: v.title(),
-            "other_name": lambda v: v.title(),
-            "gender": lambda v: v.upper(),
-            "dob": lambda v: v,
-            "password": lambda v: v,
-        }
-
-        data = set_fields(fields, kwargs, instance=user)
-
-        if not data:
-            return user
-
         updated_user = UserService().update(pk=user.id, **data)
+        if not updated_user:
+            raise Exception("User not updated")
+
         return updated_user
 
     @staticmethod

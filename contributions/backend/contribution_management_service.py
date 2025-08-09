@@ -54,12 +54,13 @@ class ContributionManagementService:
         if phone_numbers:
             NotificationManagementService(None).send_to_recipients(
                 recipients=phone_numbers,
-                template='contribution_invitation',
+                template='sms_contribution_invitation',
                 context={
                     'contribution_name': contribution.name,
                     'target_amount': contribution.target_amount,
                     'end_date': contribution.end_date.strftime('%Y-%m-%d'),
-                    'creator_name': user.full_name
+                    'creator_name': user.full_name,
+                    'contribution_link': f'https://machangohub.com/contributions/{contribution.id}'
                 },
             )
 
