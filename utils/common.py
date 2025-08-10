@@ -22,13 +22,10 @@ def get_request_data(request: WSGIRequest) -> tuple[dict, dict]:
     try:
         if request is None:
             return {}, {}
-
         method = request.method
         content_type = request.META.get('CONTENT_TYPE', '')
-
         data = {}
         files = {}
-
         if 'application/json' in content_type:
             try:
                 data = json.loads(request.body)
@@ -38,23 +35,18 @@ def get_request_data(request: WSGIRequest) -> tuple[dict, dict]:
             data = request.POST.dict()
         elif method == 'GET':
             data = request.GET.dict()
-
         if request.FILES:
             files = {
                 key: request.FILES.getlist(key) if len(request.FILES.getlist(key)) > 1
                 else request.FILES[key]
                 for key in request.FILES
             }
-
         if not data and request.body:
-            # noinspection PyBroadException
             try:
                 data = json.loads(request.body)
             except Exception:
                 data = {}
-
         return data, files
-
     except Exception as ex:
         logger.exception('get_request_data Exception: %s' % ex)
         return {}, {}
