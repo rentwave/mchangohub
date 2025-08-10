@@ -1,0 +1,101 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block content %}
+<style>
+    /* Background & Layout */
+    body, .module {
+        background-color: #0d1117; /* dark mode background */
+        color: #e6edf3;
+    }
+    h1, h2 {
+        color: #58a6ff; /* sky blue headings */
+        border-bottom: 1px solid #81d4fa;
+        padding-bottom: 5px;
+    }
+    ul {
+        background: #161b22;
+        border: 1px solid #81d4fa;
+        padding: 10px 15px;
+        border-radius: 5px;
+        list-style-type: none;
+        margin-bottom: 20px;
+    }
+    ul li {
+        padding: 5px 0;
+    }
+    /* Table styling to match admin feel */
+    table.adminlist {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        background-color: #161b22;
+        border: 1px solid #81d4fa;
+    }
+    table.adminlist th {
+        background-color: #1f6feb;
+        color: white;
+        padding: 8px;
+        text-align: left;
+    }
+    table.adminlist td {
+        padding: 8px;
+        border-top: 1px solid #81d4fa;
+    }
+    table.adminlist tr:nth-child(even) {
+        background-color: #0d1117;
+    }
+    /* Links */
+    a {
+        color: #58a6ff;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
+</style>
+
+<h1>{{ title }}</h1>
+
+<h2>Account Stats</h2>
+<ul>
+    <li>Total Accounts: {{ account_stats.total_accounts }}</li>
+    <li>Active Accounts: {{ account_stats.active_accounts }}</li>
+    <li>Frozen Accounts: {{ account_stats.frozen_accounts }}</li>
+</ul>
+
+<h2>Balance Summary</h2>
+<ul>
+    <li>Total Current: {{ balances.total_current }}</li>
+    <li>Total Available: {{ balances.total_available }}</li>
+    <li>Total Reserved: {{ balances.total_reserved }}</li>
+    <li>Total Uncleared: {{ balances.total_uncleared }}</li>
+</ul>
+
+<h2>Transactions Summary</h2>
+<ul>
+    <li>Total Transactions: {{ transactions.total_transactions }}</li>
+    <li>Total Amount: {{ transactions.total_amount }}</li>
+</ul>
+
+<h2>Recent Transactions</h2>
+<table class="adminlist">
+    <tr>
+        <th>Wallet</th>
+        <th>Amount</th>
+        <th>Date</th>
+    </tr>
+    {% for tx in recent_transactions %}
+    <tr>
+        <td>{{ tx.account.account_number }}</td>
+        <td>{{ tx.amount }}</td>
+        <td>{{ tx.date_created }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h2>Recent Actions</h2>
+<ul>
+    {% for action in recent_actions %}
+    <li>{{ action.action_time }} - {{ action.user }} - {{ action.get_change_message }}</li>
+    {% endfor %}
+</ul>
+{% endblock %}
