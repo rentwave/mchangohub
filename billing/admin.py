@@ -52,11 +52,11 @@ class DashboardDataMixin:
     def get_balance_stats(self):
         """Return aggregated balance metrics."""
         return WalletAccount.objects.aggregate(
-            total_current=Sum('current_balance'),
-            total_available=Sum('available_balance'),
-            total_reserved=Sum('reserved_balance'),
-            total_uncleared=Sum('uncleared_balance'),
-            avg_balance=Avg('current_balance')
+            total_current=Sum('current'),
+            total_available=Sum('available'),
+            total_reserved=Sum('reserved'),
+            total_uncleared=Sum('uncleared'),
+            avg_balance=Avg('current')
         )
 
     def get_transaction_stats(self):
@@ -92,10 +92,14 @@ class DashboardDataMixin:
             'inactive': 'orange',
             'frozen': 'red'
         }
+        if not isinstance(status, str):
+            status = status.name
+        status_lower = status.lower()
+        status_cap = status.capitalize()
         return format_html(
             '<span style="color: {color}; font-weight: bold;">{status}</span>',
-            color=colors.get(status.lower(), 'black'),
-            status=status.capitalize()
+            color=colors.get(status_lower, 'black'),
+            status=status_cap
         )
 
 
@@ -104,7 +108,7 @@ class DashboardDataMixin:
 class WorkflowActionLogAdmin(admin.ModelAdmin, DashboardDataMixin):
     """Admin for workflow action logs."""
     list_display = [
-        'id', 'wallet_account_display', 'action_type', 'amount_display',
+        'wallet_account_display', 'action_type', 'amount_display',
         'workflow_step', 'sequence_order', 'date_created'
     ]
     list_filter = ['action_type', 'workflow_step', 'date_created']
@@ -196,15 +200,15 @@ from .models import WalletAccount, WalletTransaction
 @admin.register(WalletAccount)
 class WalletAccountAdmin(admin.ModelAdmin, DashboardDataMixin):
     list_display = [
-        'account_number', 'contribution_display', 'current_balance_display',
-        'available_balance_display', 'reserved_balance_display',
-        'uncleared_balance_display', 'status_display', 'last_transaction_date'
+        'account_number', 'contribution_display', 'current_display',
+        'available_display', 'reserved_display',
+        'uncleared_display', 'status_display', 'last_transaction_date'
     ]
     list_filter = ['is_active', 'is_frozen', 'currency', 'last_transaction_date']
     search_fields = ['account_number', 'contribution__name']
     readonly_fields = [
-        'account_number', 'current_balance', 'available_balance',
-        'reserved_balance', 'uncleared_balance', 'version',
+        'account_number', 'current', 'available',
+        'reserved', 'uncleared', 'version',
         'last_transaction_date', 'balance_summary_display'
     ]
     actions = ['view_wallet_dashboard', 'freeze_account_action', 'unfreeze_account_action']
@@ -233,8 +237,8 @@ class WalletAccountAdmin(admin.ModelAdmin, DashboardDataMixin):
             'fields': ('contribution', 'account_number', 'currency')
         }),
         ('Balance Information', {
-            'fields': ('current_balance', 'available_balance', 'reserved_balance',
-                       'uncleared_balance', 'balance_summary_display')
+            'fields': ('current', 'available', 'reserved',
+                       'uncleared', 'balance_summary_display')
         }),
         ('Status & Metadata', {
             'fields': ('is_active', 'is_frozen', 'version', 'last_transaction_date')
@@ -245,21 +249,21 @@ class WalletAccountAdmin(admin.ModelAdmin, DashboardDataMixin):
         return str(obj.contribution)
     contribution_display.short_description = 'Contribution'
 
-    def current_balance_display(self, obj):
-        return self.format_currency(obj.currency, obj.current_balance)
-    current_balance_display.short_description = 'Current'
+    def current_display(self, obj):
+        return self.format_currency(obj.currency, obj.current)
+    current_display.short_description = 'Current'
 
-    def available_balance_display(self, obj):
-        return self.format_currency(obj.currency, obj.available_balance)
-    available_balance_display.short_description = 'Available'
+    def available_display(self, obj):
+        return self.format_currency(obj.currency, obj.available)
+    available_display.short_description = 'Available'
 
-    def reserved_balance_display(self, obj):
-        return self.format_currency(obj.currency, obj.reserved_balance)
-    reserved_balance_display.short_description = 'Reserved'
+    def reserved_display(self, obj):
+        return self.format_currency(obj.currency, obj.reserved)
+    reserved_display.short_description = 'Reserved'
 
-    def uncleared_balance_display(self, obj):
-        return self.format_currency(obj.currency, obj.uncleared_balance)
-    uncleared_balance_display.short_description = 'Uncleared'
+    def uncleared_display(self, obj):
+        return self.format_currency(obj.currency, obj.uncleared)
+    uncleared_display.short_description = 'Uncleared'
 
     def status_display(self, obj):
         if obj.is_frozen:
@@ -291,10 +295,10 @@ class WalletAccountAdmin(admin.ModelAdmin, DashboardDataMixin):
 
     def get_balance_stats(self):
         return WalletAccount.objects.aggregate(
-            total_current=Sum('current_balance'),
-            total_available=Sum('available_balance'),
-            total_reserved=Sum('reserved_balance'),
-            total_uncleared=Sum('uncleared_balance')
+            total_current=Sum('current'),
+            total_available=Sum('available'),
+            total_reserved=Sum('reserved'),
+            total_uncleared=Sum('uncleared')
         )
 
     def get_transaction_stats(self):
@@ -347,15 +351,12 @@ class BalanceLogEntryInline(admin.TabularInline):
 class BalanceLogAdmin(admin.ModelAdmin):
     """Detailed admin view for Balance Logs."""
     list_display = (
-        "id",
-        "transaction_link",
         "balance_entry_type",
         "amount_transacted",
         "total_balance",
         "state",
         "reference",
         "receipt",
-        "short_description",
         "date_created",
     )
     list_filter = ("balance_entry_type", "state", "date_created")
@@ -374,24 +375,11 @@ class BalanceLogAdmin(admin.ModelAdmin):
     inlines = [BalanceLogEntryInline]
     ordering = ("-date_created",)
 
-    def transaction_link(self, obj):
-        """Clickable transaction link to related WalletTransaction."""
-        return format_html('<a href="/admin/billing/wallettransaction/{}/change/">{}</a>',
-                           obj.transaction.id, obj.transaction)
-    transaction_link.short_description = "Transaction"
-
-    def short_description(self, obj):
-        """Truncate description to keep list view clean."""
-        return (obj.description[:50] + "...") if obj.description and len(obj.description) > 50 else obj.description
-    short_description.short_description = "Description"
-
 
 @admin.register(BalanceLogEntry)
 class BalanceLogEntryAdmin(admin.ModelAdmin):
     """Detailed admin view for Balance Log Entries."""
     list_display = (
-        "id",
-        "process_log_link",
         "entry_type",
         "account_field_type",
         "amount_transacted",
@@ -413,33 +401,3 @@ class BalanceLogEntryAdmin(admin.ModelAdmin):
         "date_created",
     )
     ordering = ("-date_created",)
-
-    def process_log_link(self, obj):
-        """Clickable link to related BalanceLog."""
-        return format_html('<a href="/admin/billing/balancelog/{}/change/">{}</a>',
-                           obj.process_log.id, obj.process_log)
-    process_log_link.short_description = "Balance Log"
-
-
-def export_balance_logs(modeladmin, request, queryset):
-    """Export selected logs to CSV."""
-    import csv
-    from django.http import HttpResponse
-    response = HttpResponse(content_type="text/csv")
-    response['Content-Disposition'] = 'attachment; filename="balance_logs.csv"'
-    writer = csv.writer(response)
-    writer.writerow(["ID", "Transaction", "Entry Type", "Amount", "Total Balance", "State", "Date Created"])
-    for log in queryset:
-        writer.writerow([
-            log.id,
-            str(log.transaction),
-            str(log.balance_entry_type),
-            log.amount_transacted,
-            log.total_balance,
-            str(log.state),
-            log.date_created
-        ])
-    return response
-
-export_balance_logs.short_description = "Export selected balance logs to CSV"
-BalanceLogAdmin.actions = [export_balance_logs]

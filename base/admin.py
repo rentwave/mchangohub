@@ -9,7 +9,7 @@ from .models import (
 @admin.register(State)
 class StateAdmin(admin.ModelAdmin):
     """Manage lifecycle states."""
-    list_display = ("id", "name", "date_created", "date_modified")
+    list_display = ("name", "date_created", "date_modified")
     search_fields = ("name",)
     ordering = ("name",)
 
@@ -17,7 +17,7 @@ class StateAdmin(admin.ModelAdmin):
 @admin.register(BalanceEntryType)
 class BalanceEntryTypeAdmin(admin.ModelAdmin):
     """Manage balance entry types."""
-    list_display = ("id", "name", "description", "date_created")
+    list_display = ("name", "description", "date_created")
     search_fields = ("name", "description")
     ordering = ("name",)
 
@@ -25,7 +25,7 @@ class BalanceEntryTypeAdmin(admin.ModelAdmin):
 @admin.register(ExecutionProfile)
 class ExecutionProfileAdmin(admin.ModelAdmin):
     """Manage execution profiles."""
-    list_display = ("id", "name", "description", "date_created")
+    list_display = ("name", "description", "date_created")
     search_fields = ("name", "description")
     ordering = ("name",)
 
@@ -42,7 +42,7 @@ class RuleProfileCommandInline(admin.TabularInline):
 @admin.register(RuleProfile)
 class RuleProfileAdmin(admin.ModelAdmin):
     """Manage rule profiles."""
-    list_display = ("id", "execution_profile_link", "name", "order", "sleep_seconds", "date_created")
+    list_display = ("execution_profile_link", "name", "order", "sleep_seconds", "date_created")
     list_filter = ("execution_profile",)
     search_fields = ("name", "execution_profile__name")
     ordering = ("execution_profile__name", "order")
@@ -58,7 +58,7 @@ class RuleProfileAdmin(admin.ModelAdmin):
 @admin.register(RuleProfileCommand)
 class RuleProfileCommandAdmin(admin.ModelAdmin):
     """Manage commands inside rule profiles."""
-    list_display = ("id", "name", "rule_profile_link", "state", "order", "date_created")
+    list_display = ("name", "rule_profile_link", "state", "order", "date_created")
     list_filter = ("state",)
     search_fields = ("name", "rule_profile__name", "state__name")
     ordering = ("rule_profile__execution_profile__name", "rule_profile__order", "order")
@@ -73,7 +73,7 @@ class RuleProfileCommandAdmin(admin.ModelAdmin):
 @admin.register(EntryType)
 class EntryTypeAdmin(admin.ModelAdmin):
     """Manage account entry types."""
-    list_display = ("id", "name", "description", "date_created")
+    list_display = ("name", "description", "date_created")
     search_fields = ("name", "description")
     ordering = ("name",)
 
@@ -81,7 +81,7 @@ class EntryTypeAdmin(admin.ModelAdmin):
 @admin.register(AccountFieldType)
 class AccountFieldTypeAdmin(admin.ModelAdmin):
     """Manage account field types."""
-    list_display = ("id", "name", "state", "description", "date_created")
+    list_display = ("name", "state", "description", "date_created")
     list_filter = ("state",)
     search_fields = ("name", "description")
     ordering = ("name",)
@@ -90,7 +90,7 @@ class AccountFieldTypeAdmin(admin.ModelAdmin):
 @admin.register(PaymentMethod)
 class PaymentMethodAdmin(admin.ModelAdmin):
     """Manage payment methods."""
-    list_display = ("id", "name", "state", "description", "date_created")
+    list_display = ("name", "state", "description", "date_created")
     list_filter = ("state",)
     search_fields = ("name", "description")
     ordering = ("name",)

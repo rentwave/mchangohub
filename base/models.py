@@ -10,7 +10,6 @@ class BaseModel(models.Model):
 
     objects = models.Manager()
 
-    SYNC_MODEL = True
 
     class Meta(object):
         abstract = True
@@ -59,7 +58,7 @@ class State(GenericBaseModel):
 
 class BalanceEntryType(GenericBaseModel):
     """A statement balance entry type e.g. "New", "Charge"""
-
+    state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)
     def __str__(self):
         return '%s' % self.name
 
@@ -73,7 +72,7 @@ class BalanceEntryType(GenericBaseModel):
 
 class ExecutionProfile(GenericBaseModel):
     """Defines the set of process execution rules to be applied to a particular operation e.g. Payment"""
-
+    state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)
     def __str__(self):
         return '%s ' % self.name
 
@@ -87,7 +86,8 @@ class RuleProfile(GenericBaseModel):
     execution_profile = models.ForeignKey(ExecutionProfile, on_delete=models.CASCADE)
     order = models.IntegerField()
     sleep_seconds = models.IntegerField(default=0)  # the time to sleep before going to the next execution.
-
+    state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)
+    
     def __str__(self):
         return '%s %s' % (self.execution_profile, self.name)
 
@@ -114,7 +114,7 @@ class RuleProfileCommand(GenericBaseModel):
 
 class EntryType(GenericBaseModel):
     """Account journal entry types for accounting e.g. "Debit", "Credit", etc"""
-
+    state = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True)
     def __str__(self):
         return '%s' % self.name
 

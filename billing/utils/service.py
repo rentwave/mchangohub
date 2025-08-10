@@ -145,10 +145,10 @@ class WalletService:
 		
 		# Compare with actual account balances
 		actual_balances = {
-			'current': account.current_balance,
-			'available': account.available_balance,
-			'reserved': account.reserved_balance,
-			'uncleared': account.uncleared_balance
+			'current': account.current,
+			'available': account.available,
+			'reserved': account.reserved,
+			'uncleared': account.uncleared
 		}
 		
 		discrepancies = {}
@@ -183,10 +183,10 @@ class WalletService:
 		active_accounts = WalletAccount.objects.filter(is_active=True).count()
 		frozen_accounts = WalletAccount.objects.filter(is_frozen=True).count()
 		balance_totals = WalletAccount.objects.aggregate(
-			total_current=Sum('current_balance'),
-			total_available=Sum('available_balance'),
-			total_reserved=Sum('reserved_balance'),
-			total_uncleared=Sum('uncleared_balance')
+			total_current=Sum('current'),
+			total_available=Sum('available'),
+			total_reserved=Sum('reserved'),
+			total_uncleared=Sum('uncleared')
 		)
 		pending_transactions = WalletTransaction.objects.filter(status='pending').count()
 		failed_transactions = WalletTransaction.objects.filter(status='failed').count()

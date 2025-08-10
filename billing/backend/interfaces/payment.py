@@ -264,7 +264,7 @@ class ApprovePaymentTransaction(InterfaceBase):
             return {"code": "300.004", "message": "Balance entry type not found"}
         if not account:
             return {"code": "300.005", "message": "Account not found"}
-        if not getattr(transaction_history, "order_amount", 0) or transaction_history.order_amount <= 0:
+        if not getattr(transaction_history, "amount", 0) or transaction_history.amount <= 0:
             return {"code": "300.006", "message": "Invalid transaction amount"}
         return {}
 
@@ -300,7 +300,7 @@ class ApprovePaymentTransaction(InterfaceBase):
                     approval_result = self.execute(
                         transaction_history=approved_transaction,
                         account=account,
-                        amount=transaction_history.order_amount,
+                        amount=transaction_history.amount,
                         balance_entry_type=balance_entry_type,
                         reference=reference,
                         description=description,
@@ -311,13 +311,13 @@ class ApprovePaymentTransaction(InterfaceBase):
                         "Successfully approved transaction %s for contribution %s with amount %s",
                         reference,
                         account.contribution.name,
-                        transaction_history.order_amount,
+                        transaction_history.amount,
                     )
                     return {
                         "code": "200.001",
                         "message": "Transaction approved successfully",
                         "transaction_id": approved_transaction.id,
-                        "amount": str(transaction_history.order_amount),
+                        "amount": str(transaction_history.amount),
                     }
             except Exception as transaction_error:
                 log.exception("Transaction processing failed for reference %s: %s",reference, transaction_error)
@@ -377,7 +377,7 @@ class RejectPaymentTransaction(InterfaceBase):
             return {"code": "300.004", "message": "Balance entry type not found"}
         if not account:
             return {"code": "300.005", "message": "Account not found"}
-        if not getattr(transaction_history, "order_amount", 0) or transaction_history.order_amount <= 0:
+        if not getattr(transaction_history, "amount", 0) or transaction_history.amount <= 0:
             return {"code": "300.006", "message": "Invalid transaction amount"}
         return {}
 
@@ -413,7 +413,7 @@ class RejectPaymentTransaction(InterfaceBase):
                     rejection_result = self.execute(
                         transaction_history=rejected_transaction,
                         account=account,
-                        amount=transaction_history.order_amount,
+                        amount=transaction_history.amount,
                         balance_entry_type=balance_entry_type,
                         reference=reference,
                         description=description,
@@ -424,13 +424,13 @@ class RejectPaymentTransaction(InterfaceBase):
                         "Successfully rejected transaction %s for contribution %s with amount %s",
                         reference,
                         account.contribution.name,
-                        transaction_history.order_amount,
+                        transaction_history.amount,
                     )
                     return {
                         "code": "200.001",
                         "message": "Transaction rejected successfully",
                         "transaction_id": rejected_transaction.id,
-                        "amount": str(transaction_history.order_amount),
+                        "amount": str(transaction_history.amount),
                     }
             except Exception as transaction_error:
                 log.exception("Transaction processing failed for reference %s: %s",reference, transaction_error)

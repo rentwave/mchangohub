@@ -41,9 +41,8 @@ class InitiateTopup(InterfaceBase):
     
     @classmethod
     def _get_balance_entry_type(cls) -> Optional[Any]:
-        if cls._balance_entry_type_cache is None:
-            cls._balance_entry_type_cache = BalanceEntryTypeService().get(name="InitiateTopUp")
-        return cls._balance_entry_type_cache
+        print(BalanceEntryTypeService().get(name="InitiateTopUp"))
+        return BalanceEntryTypeService().get(name="InitiateTopUp")
     
     @classmethod
     def _get_active_state(cls) -> Optional[Any]:
@@ -81,13 +80,13 @@ class InitiateTopup(InterfaceBase):
             return False, None
     
     def _validate_inputs(self, contribution_id: int, **kwargs) -> Optional[Dict[str, Any]]:
-        if not contribution_id or not isinstance(contribution_id, int):
+        if not contribution_id:
             return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
         try:
             contribution = ContributionService().get(
                 id=contribution_id,
-                state__name="Active"
             )
+            print(contribution)
             if not contribution:
                 return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
         except Exception:
@@ -105,10 +104,8 @@ class InitiateTopup(InterfaceBase):
     
     def _get_wallet_account(self, contribution) -> Optional[Any]:
         try:
-            active_state = self._get_active_state()
             return WalletAccountService(True).get(
                 contribution=contribution,
-                state=active_state
             )
         except Exception as e:
             logger.exception("Error fetching wallet account for contribution %s: %s", contribution.id, e)
@@ -116,10 +113,8 @@ class InitiateTopup(InterfaceBase):
     
     def _check_account_exists(self, contribution) -> bool:
         try:
-            active_state = self._get_active_state()
             return WalletAccountService().filter(
                 contribution=contribution,
-                state=active_state
             ).exists()
         except Exception as e:
             logger.exception("Error checking account existence for contribution %s: %s", contribution.id, e)
@@ -129,7 +124,9 @@ class InitiateTopup(InterfaceBase):
         transaction_history = None
         try:
             with transaction.atomic():
+                print(contribution)
                 account = self._get_wallet_account(contribution)
+                print(account)
                 if not account:
                     return self.ERROR_CODES['ACCOUNT_NOT_EXISTS']
                 balance_entry_type = self._get_balance_entry_type()
@@ -195,18 +192,16 @@ class InitiateTopup(InterfaceBase):
             return self.ERROR_CODES['TRANSACTION_FAILED']
     
     def post(self, contribution_id: int, request=None, **kwargs) -> Dict[str, Any]:
-        if not isinstance(contribution_id, int) or contribution_id <= 0:
-            return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
         try:
             validation_result = self._validate_inputs(contribution_id, **kwargs)
             if validation_result:
                 return validation_result
             contribution = ContributionService().get(
-                id=contribution_id,
-                state__name="Active"
+                id=contribution_id
             )
             if not contribution:
                 return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
+            print(self._check_account_exists(contribution))
             if not self._check_account_exists(contribution):
                 return self.ERROR_CODES['ACCOUNT_NOT_EXISTS']
             amount = Decimal(str(kwargs["amount"]))
@@ -267,34 +262,32 @@ class ApproveTopupTransaction(InterfaceBase):
             return {"code": "300.004", "message": "Balance entry type not found"}
         if not account:
             return {"code": "300.005", "message": "Account not found"}
-        if not getattr(transaction_history, "order_amount", 0) or transaction_history.order_amount <= 0:
+        if transaction_history.amount <= 0:
             return {"code": "300.006", "message": "Invalid transaction amount"}
         return {}
 
-    def post(self, request, reference: str, status: str, **kwargs) -> Dict[str, Any]:
+    def post(self, request, reference: str, **kwargs) -> Dict[str, Any]:
         if not reference:
             return {"code": "300.001", "message": "Reference is required"}
-        if not status:
-            return {"code": "300.002", "message": "Status is required"}
         try:
             balance_entry_type = self._get_balance_entry_type()
             active_state = self._get_active_state()
             transaction_history = self._get_latest_transaction(reference)
+            print(transaction_history)
             if not transaction_history:
                 return {"code": "300.003", "message": "Transaction not found"}
-            account = self._get_wallet_account(transaction_history.account.contribution, active_state)
-            validation_error = self._validate_transaction_data(transaction_history, balance_entry_type, account)
+            validation_error = self._validate_transaction_data(transaction_history, balance_entry_type, transaction_history.wallet_account)
             if validation_error:
                 return validation_error
             try:
                 with trx.atomic():
                     description = (
-                        f"Contribution approved for {account.contribution.name} "
+                        f"Contribution approved for {transaction_history.wallet_account.contribution.name} "
                         f"with reference {transaction_history.reference}"
                     )
                     approved_transaction = self.approve_transaction(
                         transaction_id=transaction_history.id,
-                        contribution=account.contribution,
+                        contribution=transaction_history.wallet_account.contribution,
                         transaction_type="CR",
                         description=description,
                     )
@@ -302,31 +295,31 @@ class ApproveTopupTransaction(InterfaceBase):
                         raise Exception("Failed to approve transaction")
                     approval_result = self.execute(
                         transaction_history=approved_transaction,
-                        account=account,
-                        amount=transaction_history.order_amount,
+                        account=transaction_history.wallet_account,
+                        amount=transaction_history.amount,
                         balance_entry_type=balance_entry_type,
                         reference=reference,
                         description=description,
                     )
-                    if not approval_result:
-                        raise Exception("Unable to process the approved transaction")
+                    # if not approval_result:
+                    #     raise Exception("Unable to process the approved transaction")
                     log.info(
                         "Successfully approved transaction %s for contribution %s with amount %s",
                         reference,
-                        account.contribution.name,
-                        transaction_history.order_amount,
+                        transaction_history.wallet_account.contribution.name,
+                        transaction_history.amount,
                     )
                     return {
                         "code": "200.001",
                         "message": "Transaction approved successfully",
                         "transaction_id": approved_transaction.id,
-                        "amount": str(transaction_history.order_amount),
+                        "amount": str(transaction_history.amount),
                     }
             except Exception as transaction_error:
                 log.exception("Transaction processing failed for reference %s: %s",reference, transaction_error)
                 try:
                     if hasattr(transaction_history, "id"):
-                        self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type= "CR", description="Transaction failed")
+                        self.reject_transaction(transaction_id=transaction_history.id, contribution=transaction_history.wallet_account.contribution, transaction_type= "CR", description="Transaction failed")
                 except Exception as fail_error:
                     log.exception( "Failed to mark transaction as failed for reference %s: %s",reference, fail_error)
                 return {"code": "300.007", "message": f"Transaction processing failed: {str(transaction_error)}"}
@@ -380,7 +373,7 @@ class RejectTopupTransaction(InterfaceBase):
             return {"code": "300.004", "message": "Balance entry type not found"}
         if not account:
             return {"code": "300.005", "message": "Account not found"}
-        if not getattr(transaction_history, "order_amount", 0) or transaction_history.order_amount <= 0:
+        if transaction_history.amount <= 0:
             return {"code": "300.006", "message": "Invalid transaction amount"}
         return {}
 
@@ -416,7 +409,7 @@ class RejectTopupTransaction(InterfaceBase):
                     rejection_result = self.execute(
                         transaction_history=rejected_transaction,
                         account=account,
-                        amount=transaction_history.order_amount,
+                        amount=transaction_history.amount,
                         balance_entry_type=balance_entry_type,
                         reference=reference,
                         description=description,
@@ -427,13 +420,13 @@ class RejectTopupTransaction(InterfaceBase):
                         "Successfully approved transaction %s for contribution %s with amount %s",
                         reference,
                         account.contribution.name,
-                        transaction_history.order_amount,
+                        transaction_history.amount,
                     )
                     return {
                         "code": "200.001",
                         "message": "Transaction rejected successfully",
                         "transaction_id": rejected_transaction.id,
-                        "amount": str(transaction_history.order_amount),
+                        "amount": str(transaction_history.amount),
                     }
             except Exception as transaction_error:
                 log.exception("Transaction processing failed for reference %s: %s",reference, transaction_error)

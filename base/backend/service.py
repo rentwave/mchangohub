@@ -1,4 +1,5 @@
-from base.models import RuleProfile, RuleProfileCommand, EntryType, BalanceEntryType, State, AccountFieldType
+from base.models import RuleProfile, RuleProfileCommand, EntryType, BalanceEntryType, State, AccountFieldType, \
+	ExecutionProfile
 from billing.models import BalanceLogEntry, BalanceLog, WalletAccount, WalletTransaction
 from utils.service_base import ServiceBase
 
