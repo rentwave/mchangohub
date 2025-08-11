@@ -4,7 +4,8 @@ from .models import Notification
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
     list_display = (
-        'user', 'delivery_method', 'template', 'frequency', 'status', 'sent_time', 'date_created'
+        'user', 'delivery_method', 'template', 'recipients', 'frequency',
+        'status', 'sent_time', 'date_created'
     )
     list_filter = ('delivery_method', 'frequency', 'status', 'date_created')
     search_fields = (
@@ -15,7 +16,7 @@ class NotificationAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('user', 'delivery_method', 'template', 'frequency', 'unique_key')
+            'fields': ('user', 'delivery_method', 'template', 'frequency', 'unique_key', 'recipients')
         }),
         ('Status & Response', {
             'fields': ('status', 'sent_time', 'response_data')

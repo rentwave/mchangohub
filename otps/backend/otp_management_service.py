@@ -128,19 +128,14 @@ class OTPManagementService:
         if otp is None:
             raise Exception("OTP not created due to a database exception")
 
-        if user:
-            NotificationManagementService(user).send_notification(
-                delivery_method=delivery_method,
-                template=f"{delivery_method.lower()}_otp",
-                context={"otp": raw_code},
-            )
-        else:
-            NotificationManagementService(None).send_to_recipients(
-                recipients=[contact],
-                delivery_method=delivery_method,
-                template=f"{delivery_method.lower()}_otp",
-                context={"otp": raw_code},
-            )
+        recipients = [contact] if contact else None
+
+        NotificationManagementService(user).send_notification(
+            delivery_method=delivery_method,
+            template=f"{delivery_method.lower()}_otp",
+            recipients=recipients,
+            context={"otp": raw_code},
+        )
 
         return otp
 
