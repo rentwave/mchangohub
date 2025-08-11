@@ -91,10 +91,10 @@ class OTPManagementService:
                 raise ValueError("Token must be provided for 2FA purpose")
 
             # TODO: REVIEW WHETHER WE SHOULD CHECK FOR EXPIRES AT HERE - IS IT NECESSARY?
-            identity = IdentityService().filter(
+            identity = IdentityService().get(
                 token=token,
                 status=Identity.Status.ACTIVATION_PENDING,
-            ).order_by("-date_created").first()
+            )
 
             if identity is None:
                 raise Exception("Identity not found")
