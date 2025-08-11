@@ -58,7 +58,7 @@ jobs:
           script: |
             set -e
             sudo chown -R $USER:$USER /srv/apps/live/mchangohub
-            cd /srv/apps/live/identity
+            cd /srv/apps/live/mchangohub
             echo "BACKEND_TAG=${{ env.docker_tag }}" > .env
             cat .env
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
