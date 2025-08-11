@@ -59,7 +59,7 @@ class WorkflowActionLog(BaseModel):
 		]
 	
 	def __str__(self):
-		return f"{self.transaction_type.replace('_', ' ').title()} - {self.amount} - {self.reference} ({self.status})"
+		return f"{self.parent_transaction.transaction_type.replace('_', ' ').title()} - {self.amount} - {self.reference} ({self.parent_transaction.status})"
 
 
 def disable_for_loaddata(signal_handler):
@@ -104,7 +104,7 @@ class WalletAccountManager(models.Manager):
 	
 	def with_balance(self):
 		"""Get accounts that have some balance."""
-		return self.filter(current_balance__gt=0)
+		return self.filter(current__gt=0)
 	
 	def by_contribution(self, contribution):
 		"""Get wallet accounts for a specific contribution."""
@@ -113,10 +113,10 @@ class WalletAccountManager(models.Manager):
 	def get_balance_summary(self) -> Dict:
 		"""Get aggregated balance summary across all active accounts."""
 		return self.active().aggregate(
-			total_current=models.Sum('current_balance'),
-			total_available=models.Sum('available_balance'),
-			total_reserved=models.Sum('reserved_balance'),
-			total_uncleared=models.Sum('uncleared_balance')
+			total_current=models.Sum('current'),
+			total_available=models.Sum('available'),
+			total_reserved=models.Sum('reserved'),
+			total_uncleared=models.Sum('uncleared')
 		)
 
 
@@ -135,13 +135,13 @@ class WalletAccount(BaseModel):
 	contribution = models.ForeignKey(Contribution, on_delete=models.CASCADE,
 	                                 related_name='wallet_accounts', db_index=True)
 	account_number = models.CharField(max_length=20, unique=True, db_index=True)
-	current_balance = models.DecimalField(max_digits=18, decimal_places=2,
+	current = models.DecimalField(max_digits=18, decimal_places=2,
 	                                      default=Decimal('0.00'), db_index=True)
-	available_balance = models.DecimalField(max_digits=18, decimal_places=2,
+	available = models.DecimalField(max_digits=18, decimal_places=2,
 	                                        default=Decimal('0.00'))
-	reserved_balance = models.DecimalField(max_digits=18, decimal_places=2,
+	reserved = models.DecimalField(max_digits=18, decimal_places=2,
 	                                       default=Decimal('0.00'))
-	uncleared_balance = models.DecimalField(max_digits=18, decimal_places=2,
+	uncleared = models.DecimalField(max_digits=18, decimal_places=2,
 	                                        default=Decimal('0.00'))
 	is_active = models.BooleanField(default=True, db_index=True)
 	is_frozen = models.BooleanField(default=False, db_index=True)
@@ -159,33 +159,33 @@ class WalletAccount(BaseModel):
 		indexes = [
 			models.Index(fields=['contribution', 'is_active']),
 			models.Index(fields=['account_number']),
-			models.Index(fields=['current_balance', 'is_active']),
+			models.Index(fields=['current', 'is_active']),
 			models.Index(fields=['currency', 'is_active']),
 			models.Index(fields=['last_transaction_date']),
 		]
 		constraints = [
-			models.CheckConstraint(check=models.Q(current_balance__gte=0),
-			                       name='positive_current_balance'),
-			models.CheckConstraint(check=models.Q(available_balance__gte=0),
-			                       name='positive_available_balance'),
-			models.CheckConstraint(check=models.Q(reserved_balance__gte=0),
-			                       name='positive_reserved_balance'),
-			models.CheckConstraint(check=models.Q(uncleared_balance__gte=0),
-			                       name='positive_uncleared_balance'),
+			models.CheckConstraint(check=models.Q(current__gte=0),
+			                       name='positive_current'),
+			models.CheckConstraint(check=models.Q(available__gte=0),
+			                       name='positive_available'),
+			models.CheckConstraint(check=models.Q(reserved__gte=0),
+			                       name='positive_reserved'),
+			models.CheckConstraint(check=models.Q(uncleared__gte=0),
+			                       name='positive_uncleared'),
 		]
 	
 	def __str__(self):
-		return f"{self.account_number} - {self.currency} {self.current_balance}"
+		return f"{self.account_number} - {self.currency} {self.current}"
 	
 	def clean(self):
 		"""Validate balance relationships according to workflow."""
 		super().clean()
-		calculated_current = self.available_balance + self.reserved_balance + self.uncleared_balance
-		if abs(self.current_balance - calculated_current) > Decimal('0.01'):
+		calculated_current = self.available + self.reserved + self.uncleared
+		if abs(self.current - calculated_current) > Decimal('0.01'):
 			raise ValidationError(
-				f"Balance mismatch: current={self.current_balance}, "
-				f"calculated={calculated_current} (available={self.available_balance} + "
-				f"reserved={self.reserved_balance} + uncleared={self.uncleared_balance})"
+				f"Balance mismatch: current={self.current}, "
+				f"calculated={calculated_current} (available={self.available} + "
+				f"reserved={self.reserved} + uncleared={self.uncleared})"
 			)
 	
 	def save(self, *args, **kwargs):
@@ -231,10 +231,10 @@ class WalletAccount(BaseModel):
 		state = State.objects.get(name='Pending')
 		account = WalletAccount.objects.select_for_update().get(pk=self.pk)
 		amount = Decimal(str(amount))
-		old_current = account.current_balance
-		old_uncleared = account.uncleared_balance
-		account.current_balance += amount
-		account.uncleared_balance += amount
+		old_current = account.current
+		old_uncleared = account.uncleared
+		account.current += amount
+		account.uncleared += amount
 		account.last_transaction_date = timezone.now()
 		account.save()
 		
@@ -243,14 +243,14 @@ class WalletAccount(BaseModel):
 			transaction_type='topup',
 			amount=amount,
 			balance_before=old_current,
-			balance_after=account.current_balance,
+			balance_after=account.current,
 			reference=reference,
 			description=description,
 			status=state,
 			metadata={
 				'workflow_step': 'initiate_topup',
 				'uncleared_before': str(old_uncleared),
-				'uncleared_after': str(account.uncleared_balance),
+				'uncleared_after': str(account.uncleared),
 			}
 		)
 		
@@ -259,7 +259,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_TO_CURRENT,
 				'amount': amount,
 				'balance_before': old_current,
-				'balance_after': account.current_balance,
+				'balance_after': account.current,
 				'workflow_step': 'initiate_topup',
 				'description': f'Added {amount} to current balance',
 			},
@@ -267,7 +267,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_TO_UNCLEARED,
 				'amount': amount,
 				'balance_before': old_uncleared,
-				'balance_after': account.uncleared_balance,
+				'balance_after': account.uncleared,
 				'workflow_step': 'initiate_topup',
 				'description': f'Added {amount} to uncleared balance',
 			}
@@ -291,8 +291,8 @@ class WalletAccount(BaseModel):
 		amount = Decimal(str(amount))
 		state_pending = State.objects.get(name='Pending')
 		completed = State.objects.get(name='Completed')
-		if account.uncleared_balance < amount:
-			raise ValidationError(f"Cannot approve {amount}. Uncleared balance: {account.uncleared_balance}")
+		if account.uncleared < amount:
+			raise ValidationError(f"Cannot approve {amount}. Uncleared balance: {account.uncleared}")
 		try:
 			transaction_obj = WalletTransaction.objects.get(
 				wallet_account=account,
@@ -302,10 +302,10 @@ class WalletAccount(BaseModel):
 			)
 		except WalletTransaction.DoesNotExist:
 			raise ValidationError(f"No pending topup transaction found for reference: {reference}")
-		old_uncleared = account.uncleared_balance
-		old_available = account.available_balance
-		account.uncleared_balance -= amount
-		account.available_balance += amount
+		old_uncleared = account.uncleared
+		old_available = account.available
+		account.uncleared -= amount
+		account.available += amount
 		account.last_transaction_date = timezone.now()
 		account.save()
 		transaction_obj.status = completed
@@ -314,9 +314,9 @@ class WalletAccount(BaseModel):
 			'workflow_step': 'topup_approved',
 			'approved_at': timezone.now().isoformat(),
 			'uncleared_before_approval': str(old_uncleared),
-			'uncleared_after_approval': str(account.uncleared_balance),
+			'uncleared_after_approval': str(account.uncleared),
 			'available_before_approval': str(old_available),
-			'available_after_approval': str(account.available_balance),
+			'available_after_approval': str(account.available),
 		})
 		transaction_obj.save()
 		
@@ -325,7 +325,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_FROM_UNCLEARED,
 				'amount': amount,
 				'balance_before': old_uncleared,
-				'balance_after': account.uncleared_balance,
+				'balance_after': account.uncleared,
 				'workflow_step': 'topup_approved',
 				'description': f'Deducted {amount} from uncleared balance',
 			},
@@ -333,7 +333,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_TO_AVAILABLE,
 				'amount': amount,
 				'balance_before': old_available,
-				'balance_after': account.available_balance,
+				'balance_after': account.available,
 				'workflow_step': 'topup_approved',
 				'description': f'Added {amount} to available balance',
 			}
@@ -366,28 +366,28 @@ class WalletAccount(BaseModel):
 		except WalletTransaction.DoesNotExist:
 			raise ValidationError(f"No pending topup transaction found for reference: {reference}")
 		
-		if account.uncleared_balance < amount:
-			raise ValidationError(f"Cannot reject {amount}. Uncleared balance: {account.uncleared_balance}")
+		if account.uncleared < amount:
+			raise ValidationError(f"Cannot reject {amount}. Uncleared balance: {account.uncleared}")
 		
-		if account.current_balance < amount:
-			raise ValidationError(f"Cannot reject {amount}. Current balance: {account.current_balance}")
+		if account.current < amount:
+			raise ValidationError(f"Cannot reject {amount}. Current balance: {account.current}")
 		
-		old_current = account.current_balance
-		old_uncleared = account.uncleared_balance
+		old_current = account.current
+		old_uncleared = account.uncleared
 		
-		account.current_balance -= amount
-		account.uncleared_balance -= amount
+		account.current -= amount
+		account.uncleared -= amount
 		account.last_transaction_date = timezone.now()
 		account.save()
 		transaction_obj.status = failed
 		transaction_obj.description = description
-		transaction_obj.balance_after = account.current_balance
+		transaction_obj.balance_after = account.current
 		transaction_obj.metadata.update({
 			'workflow_step': 'topup_rejected',
 			'rejected_at': timezone.now().isoformat(),
 			'rejection_reason': description,
 			'uncleared_before_rejection': str(old_uncleared),
-			'uncleared_after_rejection': str(account.uncleared_balance),
+			'uncleared_after_rejection': str(account.uncleared),
 		})
 		transaction_obj.save()
 		
@@ -396,7 +396,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_FROM_CURRENT,
 				'amount': amount,
 				'balance_before': old_current,
-				'balance_after': account.current_balance,
+				'balance_after': account.current,
 				'workflow_step': 'topup_rejected',
 				'description': f'Deducted {amount} from current balance',
 			},
@@ -404,7 +404,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_FROM_UNCLEARED,
 				'amount': amount,
 				'balance_before': old_uncleared,
-				'balance_after': account.uncleared_balance,
+				'balance_after': account.uncleared,
 				'workflow_step': 'topup_rejected',
 				'description': f'Deducted {amount} from uncleared balance',
 			}
@@ -428,29 +428,29 @@ class WalletAccount(BaseModel):
 			raise ValidationError("Account is frozen")
 		state = State.objects.get(name='Pending')
 		amount = Decimal(str(amount))
-		if account.available_balance < amount:
-			raise ValidationError(f"Insufficient available balance. Available: {account.available_balance}")
-		old_available = account.available_balance
-		old_reserved = account.reserved_balance
-		account.available_balance -= amount
-		account.reserved_balance += amount
+		if account.available < amount:
+			raise ValidationError(f"Insufficient available balance. Available: {account.available}")
+		old_available = account.available
+		old_reserved = account.reserved
+		account.available -= amount
+		account.reserved += amount
 		account.last_transaction_date = timezone.now()
 		account.save()
 		transaction_obj = WalletTransaction.objects.create(
 			wallet_account=account,
 			transaction_type='payment',
 			amount=amount,
-			balance_before=account.current_balance,
-			balance_after=account.current_balance,
+			balance_before=account.current,
+			balance_after=account.current,
 			reference=reference,
 			description=description,
 			status=state,
 			metadata={
 				'workflow_step': 'initiate_payment',
 				'available_before': str(old_available),
-				'available_after': str(account.available_balance),
+				'available_after': str(account.available),
 				'reserved_before': str(old_reserved),
-				'reserved_after': str(account.reserved_balance),
+				'reserved_after': str(account.reserved),
 			}
 		)
 		
@@ -459,7 +459,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_FROM_AVAILABLE,
 				'amount': amount,
 				'balance_before': old_available,
-				'balance_after': account.available_balance,
+				'balance_after': account.available,
 				'workflow_step': 'initiate_payment',
 				'description': f'Deducted {amount} from available balance',
 			},
@@ -467,7 +467,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_TO_RESERVED,
 				'amount': amount,
 				'balance_before': old_reserved,
-				'balance_after': account.reserved_balance,
+				'balance_after': account.reserved,
 				'workflow_step': 'initiate_payment',
 				'description': f'Added {amount} to reserved balance',
 			}
@@ -501,28 +501,28 @@ class WalletAccount(BaseModel):
 		except WalletTransaction.DoesNotExist:
 			raise ValidationError(f"No pending payment transaction found for reference: {reference}")
 		
-		if account.reserved_balance < amount:
-			raise ValidationError(f"Cannot approve {amount}. Reserved balance: {account.reserved_balance}")
+		if account.reserved < amount:
+			raise ValidationError(f"Cannot approve {amount}. Reserved balance: {account.reserved}")
 		
-		if account.current_balance < amount:
-			raise ValidationError(f"Cannot approve {amount}. Current balance: {account.current_balance}")
+		if account.current < amount:
+			raise ValidationError(f"Cannot approve {amount}. Current balance: {account.current}")
 		
-		old_current = account.current_balance
-		old_reserved = account.reserved_balance
-		account.reserved_balance -= amount
-		account.current_balance -= amount
+		old_current = account.current
+		old_reserved = account.reserved
+		account.reserved -= amount
+		account.current -= amount
 		account.last_transaction_date = timezone.now()
 		account.save()
 		transaction_obj.status = state_completed
 		transaction_obj.description = description
-		transaction_obj.balance_after = account.current_balance
+		transaction_obj.balance_after = account.current
 		transaction_obj.metadata.update({
 			'workflow_step': 'payment_approved',
 			'approved_at': timezone.now().isoformat(),
 			'reserved_before_approval': str(old_reserved),
-			'reserved_after_approval': str(account.reserved_balance),
+			'reserved_after_approval': str(account.reserved),
 			'current_before_approval': str(old_current),
-			'current_after_approval': str(account.current_balance),
+			'current_after_approval': str(account.current),
 		})
 		transaction_obj.save()
 		
@@ -531,7 +531,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_FROM_RESERVED,
 				'amount': amount,
 				'balance_before': old_reserved,
-				'balance_after': account.reserved_balance,
+				'balance_after': account.reserved,
 				'workflow_step': 'payment_approved',
 				'description': f'Deducted {amount} from reserved balance',
 			},
@@ -539,7 +539,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_FROM_CURRENT,
 				'amount': amount,
 				'balance_before': old_current,
-				'balance_after': account.current_balance,
+				'balance_after': account.current,
 				'workflow_step': 'payment_approved',
 				'description': f'Deducted {amount} from current balance',
 			}
@@ -572,14 +572,14 @@ class WalletAccount(BaseModel):
 		except WalletTransaction.DoesNotExist:
 			raise ValidationError(f"No pending payment transaction found for reference: {reference}")
 		
-		if account.reserved_balance < amount:
-			raise ValidationError(f"Cannot reject {amount}. Reserved balance: {account.reserved_balance}")
+		if account.reserved < amount:
+			raise ValidationError(f"Cannot reject {amount}. Reserved balance: {account.reserved}")
 		
-		old_available = account.available_balance
-		old_reserved = account.reserved_balance
+		old_available = account.available
+		old_reserved = account.reserved
 		
-		account.reserved_balance -= amount
-		account.available_balance += amount
+		account.reserved -= amount
+		account.available += amount
 		account.last_transaction_date = timezone.now()
 		account.save()
 		transaction_obj.status = failed
@@ -589,9 +589,9 @@ class WalletAccount(BaseModel):
 			'rejected_at': timezone.now().isoformat(),
 			'rejection_reason': description,
 			'available_before_rejection': str(old_available),
-			'available_after_rejection': str(account.available_balance),
+			'available_after_rejection': str(account.available),
 			'reserved_before_rejection': str(old_reserved),
-			'reserved_after_rejection': str(account.reserved_balance),
+			'reserved_after_rejection': str(account.reserved),
 		})
 		transaction_obj.save()
 		
@@ -600,7 +600,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_FROM_RESERVED,
 				'amount': amount,
 				'balance_before': old_reserved,
-				'balance_after': account.reserved_balance,
+				'balance_after': account.reserved,
 				'workflow_step': 'payment_rejected',
 				'description': f'Deducted {amount} from reserved balance',
 			},
@@ -608,7 +608,7 @@ class WalletAccount(BaseModel):
 				'action_type': WorkflowActionType.MONEY_TO_AVAILABLE,
 				'amount': amount,
 				'balance_before': old_available,
-				'balance_after': account.available_balance,
+				'balance_after': account.available,
 				'workflow_step': 'payment_rejected',
 				'description': f'Added {amount} to available balance',
 			}
@@ -655,10 +655,10 @@ class WalletAccount(BaseModel):
 	def balance_summary(self):
 		"""Get complete balance breakdown."""
 		return {
-			'current': self.current_balance,
-			'available': self.available_balance,
-			'reserved': self.reserved_balance,
-			'uncleared': self.uncleared_balance,
+			'current': self.current,
+			'available': self.available,
+			'reserved': self.reserved,
+			'uncleared': self.uncleared,
 			'currency': self.currency,
 			'is_frozen': self.is_frozen,
 			'account_number': self.account_number
@@ -708,7 +708,7 @@ class WalletTransaction(BaseModel):
 	balance_before = models.DecimalField(max_digits=18, decimal_places=2)
 	balance_after = models.DecimalField(max_digits=18, decimal_places=2)
 	reference = models.CharField(max_length=100, unique=True, db_index=True)
-	receipt_number = models.CharField(max_length=100, unique=True, db_index=True)
+	receipt_number = models.CharField(max_length=100, db_index=True)
 	description = models.CharField(max_length=255, blank=True)
 	status = models.ForeignKey(State, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
 	metadata = models.JSONField(default=dict, blank=True)

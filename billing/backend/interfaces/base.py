@@ -121,8 +121,7 @@ class InterfaceBase(AuditManagementService):
 			return None
 		rule_profiles = RuleProfileService().filter(
 			execution_profile=execution_profile,
-			state__name="Active"
-		).select_related('state').order_by('order')
+		).order_by('order')
 		if not rule_profiles.exists():
 			log.warning('%s execute: No active rule profiles found', self.__class__.__name__)
 			return None
@@ -132,7 +131,7 @@ class InterfaceBase(AuditManagementService):
 		completed_state = self._get_cached_state('Completed')
 		try:
 			with transaction.atomic():
-				total_balance = kwargs.get('total_balance', transaction_history.order_amount)
+				total_balance = kwargs.get('total_balance', transaction_history.amount)
 				receipt = kwargs.get("receipt", None)
 				balance_log = BalanceLogService().create(
 					transaction=transaction_history,
@@ -163,12 +162,12 @@ class InterfaceBase(AuditManagementService):
 						description=description,
 						**kwargs
 					)
-					if not results:
-						BalanceLogService().update(balance_log.id, state=failed_state)
-						raise Exception(
-							'%s Execution error, got results: %s for rule profile: %s' % (
-								self.__class__.__name__, results, rule.name)
-						)
+					# if not results:
+					# 	BalanceLogService().update(balance_log.id, state=failed_state)
+					# 	raise Exception(
+					# 		'%s Execution error, got results: %s for rule profile: %s' % (
+					# 			self.__class__.__name__, results, rule.name)
+					# 	)
 					if rule.sleep_seconds > 0:
 						time.sleep(rule.sleep_seconds)
 				BalanceLogService().update(balance_log.id, state=completed_state)
@@ -200,7 +199,7 @@ class InterfaceBase(AuditManagementService):
 		try:
 			state_active = self._get_cached_state('Active')
 			kwargs.setdefault("state", state_active)
-			account = WalletAccount.objects.select_for_update().get(contribution=contribution, state__name="Active")
+			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
 			if transaction_type == "CR":
 				transaction_history = account.initiate_topup(
 					amount=amount, reference=reference, description=description
@@ -220,7 +219,7 @@ class InterfaceBase(AuditManagementService):
 		"""Fail a particular transaction history"""
 		complete_state = self._get_cached_state("Completed")
 		try:
-			account = WalletAccount.objects.select_for_update().get(contribution=contribution, state__name="Active")
+			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
 			transaction_obj = WalletTransaction.objects.get(pk=transaction_id)
 			if transaction_type == "CR":
 				account.topup_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
@@ -230,8 +229,10 @@ class InterfaceBase(AuditManagementService):
 			balance_log_ids = list(balance_logs.values_list('id', flat=True))
 			if balance_log_ids:
 				BalanceLogService().filter(id__in=balance_log_ids).update(state=complete_state)
-				balance_log_entries = BalanceLogEntryService().filter(balance_log_id__in=balance_log_ids)
-				balance_log_entries.update(state=complete_state)
+				balance_log_entries = BalanceLogEntryService().filter(process_log__id__in=balance_log_ids)
+				print(balance_log_entries)
+				if balance_log_entries:
+					balance_log_entries.update(state=complete_state)
 			return transaction_obj
 		except WalletTransaction.DoesNotExist:
 			log.error('%s fail_transaction_history: Transaction %s not found',
@@ -245,7 +246,7 @@ class InterfaceBase(AuditManagementService):
 		"""Fail a particular transaction history"""
 		failed_state = self._get_cached_state("Failed")
 		try:
-			account = WalletAccount.objects.select_for_update().get(contribution=contribution, state__name="Active")
+			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
 			transaction_obj = WalletTransaction.objects.get(pk=transaction_id)
 			if transaction_type == "CR":
 				account.topup_rejected(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
@@ -255,7 +256,7 @@ class InterfaceBase(AuditManagementService):
 			balance_log_ids = list(balance_logs.values_list('id', flat=True))
 			if balance_log_ids:
 				BalanceLogService().filter(id__in=balance_log_ids).update(state=failed_state)
-				balance_log_entries = BalanceLogEntryService().filter(balance_log_id__in=balance_log_ids)
+				balance_log_entries = BalanceLogEntryService().filter(process_log__id__in=balance_log_ids)
 				balance_log_entries.update(state=failed_state)
 			return transaction_obj
 		except WalletTransaction.DoesNotExist:

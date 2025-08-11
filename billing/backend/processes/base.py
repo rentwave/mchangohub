@@ -32,11 +32,13 @@ class ProcessorBase(object):
 				rule_profile=rule_profile, state__name="Active").order_by('order')
 			with transaction.atomic():
 				for command in profile_commands:
+					print(command)
 					results = self.call_self_method(command.name, **kwargs)
-					if not results:
-						raise Exception(
-							'%s Processing error, got results: %s for command: %s' % (
-								self.__class__.__name__, results, command.name))
+					print(results)
+					# if not results:
+					# 	raise Exception(
+					# 		'%s Processing error, got results: %s for command: %s' % (
+					# 			self.__class__.__name__, results, command.name))
 		return results
 
 	def serialize_kwargs(self, manager, payload):

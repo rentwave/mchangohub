@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.urls import re_path, path
 
-from billing.backend.interfaces.topup import InitiateTopup
+from billing.backend.interfaces.topup import InitiateTopup, ApproveTopupTransaction
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
 from billing.itergrations.pesaway import PesaWayAPIClient
 
@@ -154,16 +154,18 @@ class PesaWayWalletInterface:
 			reference = TransactionRefGenerator().generate()
 			channel = "MPESA"
 			reason = f"Contribution on {timezone.now()}"
+			ref = str(reference) + str(time.time()).replace('.', '')
 			response = self.pesaway.receive_c2b_payment(
-				external_reference=reference,
+				external_reference=ref,
 				amount=data.get("amount"),
 				phone_number=data.get("phone_number"),
 				channel=channel,
 				reason=reason,
-				results_url="https://example.com//billing/wallet/c2b_payment_callback"
+				results_url="https://way-promises-scanning-bias.trycloudflare.com/billing/wallet/c2b_payment_callback/"
 			)
 			if not response:
 				return JsonResponse({"code": "999.999.999"}, status=500)
+			data['ref'] = ref
 			topup = InitiateTopup().post(contribution_id=data.get("contribution"), **data)
 			return JsonResponse(topup)
 		except Exception as e:
@@ -176,8 +178,20 @@ class PesaWayWalletInterface:
 	def c2b_payment_callback_endpoint(self, request):
 		try:
 			data = unpack_request_data(request)
-			lgr.info("C2B Payment Callback Data: %s", data)
-			return JsonResponse(data)
+			print("C2B Payment Callback Data: %s", data)
+			# {'ResultCode': 0, 'ResultDesc': 'The service request is processed successfully.',
+			#  'OriginatorReference': 'A0GN3G181W1754839387277418', 'TransactionID': 'PHY0B1875B042',
+			#  'TransactionAmount': '500.00', 'TransactionReceipt': 'PHY0B1875B042', 'AccountAvailableFunds': '76400.65',
+			#  'ReceiverPartyPublicName': '254710956633',
+			#  'TransactionCompletedDateTime': '2025-08-10 15:23:13.231094+00:00'}
+			#
+			if data.get("ResultCode") == 0 and data.get("ResultDesc") == "The service request is processed successfully.":
+				reference = data.get("OriginatorReference")
+				approve_transaction = ApproveTopupTransaction().post(request, reference=reference)
+				print(approve_transaction)
+				return JsonResponse(approve_transaction)
+			else:
+				return JsonResponse({"code": "999.999.999"}, status=500)
 		except Exception as e:
 			lgr.exception("C2B Transfer Failed: %s", e)
 			return JsonResponse({"code": "999.999.999"}, status=500)

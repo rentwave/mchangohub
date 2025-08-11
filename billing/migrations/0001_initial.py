@@ -64,10 +64,10 @@ class Migration(migrations.Migration):
                 ('date_created', models.DateTimeField(auto_now_add=True)),
                 ('synced', models.BooleanField(default=False)),
                 ('account_number', models.CharField(db_index=True, max_length=20, unique=True)),
-                ('current_balance', models.DecimalField(db_index=True, decimal_places=2, default=Decimal('0.00'), max_digits=18)),
-                ('available_balance', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=18)),
-                ('reserved_balance', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=18)),
-                ('uncleared_balance', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=18)),
+                ('current', models.DecimalField(db_index=True, decimal_places=2, default=Decimal('0.00'), max_digits=18)),
+                ('available', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=18)),
+                ('reserved', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=18)),
+                ('uncleared', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=18)),
                 ('is_active', models.BooleanField(db_index=True, default=True)),
                 ('is_frozen', models.BooleanField(db_index=True, default=False)),
                 ('currency', models.CharField(db_index=True, default='KES', max_length=3)),
@@ -145,7 +145,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='walletaccount',
-            index=models.Index(fields=['current_balance', 'is_active'], name='billing_wal_current_d15589_idx'),
+            index=models.Index(fields=['current', 'is_active'], name='billing_wal_current_d15589_idx'),
         ),
         migrations.AddIndex(
             model_name='walletaccount',
@@ -157,19 +157,19 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='walletaccount',
-            constraint=models.CheckConstraint(condition=models.Q(('current_balance__gte', 0)), name='positive_current_balance'),
+            constraint=models.CheckConstraint(condition=models.Q(('current__gte', 0)), name='positive_current'),
         ),
         migrations.AddConstraint(
             model_name='walletaccount',
-            constraint=models.CheckConstraint(condition=models.Q(('available_balance__gte', 0)), name='positive_available_balance'),
+            constraint=models.CheckConstraint(condition=models.Q(('available__gte', 0)), name='positive_available'),
         ),
         migrations.AddConstraint(
             model_name='walletaccount',
-            constraint=models.CheckConstraint(condition=models.Q(('reserved_balance__gte', 0)), name='positive_reserved_balance'),
+            constraint=models.CheckConstraint(condition=models.Q(('reserved__gte', 0)), name='positive_reserved'),
         ),
         migrations.AddConstraint(
             model_name='walletaccount',
-            constraint=models.CheckConstraint(condition=models.Q(('uncleared_balance__gte', 0)), name='positive_uncleared_balance'),
+            constraint=models.CheckConstraint(condition=models.Q(('uncleared__gte', 0)), name='positive_uncleared'),
         ),
         migrations.AddIndex(
             model_name='wallettransaction',
