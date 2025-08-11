@@ -34,10 +34,7 @@ class InterfaceBase(AuditManagementService):
 	@classmethod
 	def _get_cached_execution_profile(cls, profile_name: str) -> Any:
 		"""Get execution profile from cache or database."""
-		cache_key = f"exec_profile_{profile_name}"
-		if cache_key not in cls._execution_profile_cache:
-			cls._execution_profile_cache[cache_key] = ExecutionProfileService().get(name=profile_name)
-		return cls._execution_profile_cache[cache_key]
+		return ExecutionProfileService().get(name=profile_name)
 	
 	def call_class_method(self, class_instance: object, function_name: str, **kwargs) -> Optional[Any]:
 		"""
@@ -162,16 +159,16 @@ class InterfaceBase(AuditManagementService):
 						description=description,
 						**kwargs
 					)
-					# if not results:
-					# 	BalanceLogService().update(balance_log.id, state=failed_state)
-					# 	raise Exception(
-					# 		'%s Execution error, got results: %s for rule profile: %s' % (
-					# 			self.__class__.__name__, results, rule.name)
-					# 	)
+					print("Results from %s: %s" % (rule.name, results))
+					if results is None:
+						BalanceLogService().update(balance_log.id, state=failed_state)
+						raise Exception(
+							'%s Execution error, got results: %s for rule profile: %s' % (
+								self.__class__.__name__, results, rule.name)
+						)
 					if rule.sleep_seconds > 0:
 						time.sleep(rule.sleep_seconds)
 				BalanceLogService().update(balance_log.id, state=completed_state)
-		
 		except Exception as e:
 			log.exception('%s execute: Transaction failed: %s', self.__class__.__name__, e)
 			raise
@@ -215,16 +212,16 @@ class InterfaceBase(AuditManagementService):
 			log.exception('%s create_transaction_history Exception: %s', self.__class__.__name__, e)
 			raise Exception('%s Could not create Transaction History. Server Error.' % self.__class__.__name__)
 	
-	def approve_transaction(self, transaction_id: int, contribution, transaction_type: str, description) -> WalletTransaction:
+	def approve_transaction(self, transaction_id: int, contribution, transaction_type: str, description, receipt) -> WalletTransaction:
 		"""Fail a particular transaction history"""
 		complete_state = self._get_cached_state("Completed")
 		try:
 			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
 			transaction_obj = WalletTransaction.objects.get(pk=transaction_id)
 			if transaction_type == "CR":
-				account.topup_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
+				account.topup_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description, receipt=receipt,)
 			else:
-				account.payment_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
+				account.payment_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description, receipt=receipt,)
 			balance_logs = BalanceLogService().filter(transaction=transaction_obj)
 			balance_log_ids = list(balance_logs.values_list('id', flat=True))
 			if balance_log_ids:

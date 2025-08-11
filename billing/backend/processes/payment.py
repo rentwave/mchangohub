@@ -14,14 +14,16 @@ class InitiatePayment(ProcessorBase):
 
 class ApprovePaymentTransaction(ProcessorBase):
 	""" Wallet Topup Approval processes """
+	
+	def debit_account_reserved(self, account, balance_log, amount, **kwargs):
+		"""Credits the account's available balance"""
+		return self.credit(account, balance_log, 'reserved', amount, **kwargs)
 
 	def debit_account_current(self, account, balance_log, amount, **kwargs):
 		"""Debits the account's uncleared balance"""
 		return self.debit(account, balance_log, 'current', amount, **kwargs)
 
-	def debit_account_reserved(self, account, balance_log, amount, **kwargs):
-		"""Credits the account's available balance"""
-		return self.credit(account, balance_log, 'reserved', amount, **kwargs)
+	
 	
 class RejectPaymentTransaction(ProcessorBase):
 	"""Monthly Deduct Approval processes"""

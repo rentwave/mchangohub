@@ -2,13 +2,12 @@ import json
 import time
 import logging
 from datetime import datetime
-
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.urls import re_path, path
-
 from billing.backend.interfaces.topup import InitiateTopup, ApproveTopupTransaction
+from billing.backend.interfaces.payment import InitiatePayment, ApprovePaymentTransaction
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
 from billing.itergrations.pesaway import PesaWayAPIClient
 
@@ -119,15 +118,24 @@ class PesaWayWalletInterface:
 		start = time.time()
 		try:
 			data = unpack_request_data(request)
-			response = self.pesaway.send_b2c_payment(
-				external_reference=data.get("ExternalReference"),
-				amount=data.get("Amount"),
-				phone_number=data.get("PhoneNumber"),
-				channel=data.get("Channel"),
-				reason=data.get("Reason"),
-				results_url=data.get("ResultsUrl"),
+			reference = TransactionRefGenerator().generate()
+			channel = "MPESA"
+			reason = f"Withdrawal from contribution on {timezone.now()}"
+			ref = str(reference) + str(time.time()).replace('.', '')
+			response = self.pesaway.receive_c2b_payment(
+				external_reference=ref,
+				amount=data.get("amount"),
+				phone_number=data.get("phone_number"),
+				channel=channel,
+				reason=reason,
+				results_url="https://9101d202efad.ngrok-free.app/billing/wallet/b2c_transfer_callback_url/"
 			)
-			return JsonResponse(response)
+			if response.get('code') != '200.001':
+				lgr.error("C2B Transfer Failed: %s", response)
+				return JsonResponse({"code": "403.033", "message": "Transaction could not be completed"}, status=500)
+			data['ref'] = ref
+			payment = InitiatePayment().post(contribution_id=data.get("contribution"), **data)
+			return JsonResponse(payment)
 		except Exception as e:
 			lgr.exception("B2C Transfer Failed: %s", e)
 			return JsonResponse({"code": "999.999.999"}, status=500)
@@ -138,8 +146,16 @@ class PesaWayWalletInterface:
 	def b2c_transfer_callback_url(self, request):
 		try:
 			data = unpack_request_data(request)
-			lgr.info("B2C Transfer Callback Data: %s", data)
-			return JsonResponse(data)
+			print("B2C Transfer Callback Data: %s", data)
+			if data.get("ResultCode") == 0 and data.get(
+					"ResultDesc") == "The service request is processed successfully.":
+				reference = data.get("OriginatorReference")
+				receipt = data.get("TransactionID")
+				approve_transaction = ApprovePaymentTransaction().post(request, reference=reference, receipt=receipt)
+				print(approve_transaction)
+				return JsonResponse(approve_transaction)
+			else:
+				return JsonResponse({"code": "999.999.999"}, status=500)
 		except Exception as e:
 			lgr.exception("B2C Transfer Failed: %s", e)
 			return JsonResponse({"code": "999.999.999"}, status=500)
@@ -161,10 +177,11 @@ class PesaWayWalletInterface:
 				phone_number=data.get("phone_number"),
 				channel=channel,
 				reason=reason,
-				results_url="https://way-promises-scanning-bias.trycloudflare.com/billing/wallet/c2b_payment_callback/"
+				results_url="https://9101d202efad.ngrok-free.app/billing/wallet/c2b_payment_callback/"
 			)
-			if not response:
-				return JsonResponse({"code": "999.999.999"}, status=500)
+			if response.get('code') != '200.001':
+				lgr.error("C2B Transfer Failed: %s", response)
+				return JsonResponse({"code": "403.033", "message":"Transaction could not be completed"}, status=500)
 			data['ref'] = ref
 			topup = InitiateTopup().post(contribution_id=data.get("contribution"), **data)
 			return JsonResponse(topup)
@@ -179,15 +196,10 @@ class PesaWayWalletInterface:
 		try:
 			data = unpack_request_data(request)
 			print("C2B Payment Callback Data: %s", data)
-			# {'ResultCode': 0, 'ResultDesc': 'The service request is processed successfully.',
-			#  'OriginatorReference': 'A0GN3G181W1754839387277418', 'TransactionID': 'PHY0B1875B042',
-			#  'TransactionAmount': '500.00', 'TransactionReceipt': 'PHY0B1875B042', 'AccountAvailableFunds': '76400.65',
-			#  'ReceiverPartyPublicName': '254710956633',
-			#  'TransactionCompletedDateTime': '2025-08-10 15:23:13.231094+00:00'}
-			#
 			if data.get("ResultCode") == 0 and data.get("ResultDesc") == "The service request is processed successfully.":
 				reference = data.get("OriginatorReference")
-				approve_transaction = ApproveTopupTransaction().post(request, reference=reference)
+				receipt = data.get("TransactionID")
+				approve_transaction = ApproveTopupTransaction().post(request, reference=reference, receipt=receipt)
 				print(approve_transaction)
 				return JsonResponse(approve_transaction)
 			else:

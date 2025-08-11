@@ -27,3 +27,9 @@ tornado==6.5.2
 tzdata==2025.2
 vine==5.1.0
 wcwidth==0.2.13
+psycopg2-binary==2.9.3
+gunicorn==22.0.0
+whitenoise==6.7.0
+django-cors-headers==3.11.0
+boto3
+django-storages

@@ -124,7 +124,6 @@ class ProcessorBase(object):
 	def debit(self, account, process_log, balance_type, amount, **kwargs):
 		""" Debits the account, logging the balance log correctly. """
 		try:
-			# account = getattr(process_log.process, 'account')
 			if not account:
 				raise Exception('DEBIT: The requested account was not found for this user!')
 			amount_transacted = Decimal(str(round(float(amount), 2)))
