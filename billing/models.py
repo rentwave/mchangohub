@@ -278,7 +278,7 @@ class WalletAccount(BaseModel):
 		return transaction_obj
 	
 	@transaction.atomic
-	def topup_approved(self, amount, reference, description="TopUp - Approved"):
+	def topup_approved(self, amount, reference, description="TopUp - Approved", receipt=""):
 		"""
 		Step 2: TopUp Approved - Move money from uncleared to available.
 		Updates existing transaction to 'completed' status
@@ -309,6 +309,7 @@ class WalletAccount(BaseModel):
 		account.last_transaction_date = timezone.now()
 		account.save()
 		transaction_obj.status = completed
+		transaction_obj.receipt_number = receipt
 		transaction_obj.description = description
 		transaction_obj.metadata.update({
 			'workflow_step': 'topup_approved',
@@ -478,7 +479,7 @@ class WalletAccount(BaseModel):
 		return transaction_obj
 	
 	@transaction.atomic
-	def payment_approved(self, amount, reference, description="Payment - Approved"):
+	def payment_approved(self, amount, reference, description="Payment - Approved", receipt=""):
 		"""
 		Step 4: Payment Approved - Remove money from reserved and current.
 		Updates existing transaction to 'completed' status
@@ -515,6 +516,7 @@ class WalletAccount(BaseModel):
 		account.save()
 		transaction_obj.status = state_completed
 		transaction_obj.description = description
+		transaction_obj.receipt_number = receipt
 		transaction_obj.balance_after = account.current
 		transaction_obj.metadata.update({
 			'workflow_step': 'payment_approved',

@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  app:
+    container_name: identity
+    image: osiru/identity:${BACKEND_TAG}
+    working_dir: /usr/src/app
+    ports:
+      - "8055:8055"
+    depends_on:
+      - postgres
+    environment:
+      - ENV=production
+      - DEBUG=0
+      - DJANGO_SECRET_KEY=django-insecure-fmq&5@^#yv*$lmqc8o+q(_#v)_9n#&u*_=lwz+=ty^@)6b@v=m
+      - USE_S3=0
+      - ALLOWED_HOST=*
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - DB_IGNORE_SSL=true
+    volumes:
+      - .:/usr/src/app
+      - ./staticfiles:/usr/src/app/staticfiles
+      - mchango_hub_logs:/var/log/mchangohub
+    networks:
+      - mchango_hub_net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.5"
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5481:5432"
+    volumes:
+      - mchango_hub_pg:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    networks:
+      - mchango_hub_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+
+volumes:
+  portainer_data:
+  mchango_hub_pg:
+  mchango_hub_logs:
+    driver: local
+
+networks:
+  mchango_hub_net:
+    driver: bridge

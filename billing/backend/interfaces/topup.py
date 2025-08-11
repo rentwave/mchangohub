@@ -164,9 +164,7 @@ class InitiateTopup(InterfaceBase):
                 except Exception as e:
                     logger.exception("Failed to execute transaction: %s", e)
                     if transaction_history:
-                        self.reject_transaction(transaction_id=transaction_history.id,
-                                                contribution=account.contribution, transaction_type="CR",
-                                                description="Transaction failed")
+                        self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type="CR", description="Transaction failed")
                     return self.ERROR_CODES['TRANSACTION_EXECUTION_FAILED']
                 logger.info(
                     "Successfully initiated topup for contribution %s, amount %s, reference %s",
@@ -266,12 +264,11 @@ class ApproveTopupTransaction(InterfaceBase):
             return {"code": "300.006", "message": "Invalid transaction amount"}
         return {}
 
-    def post(self, request, reference: str, **kwargs) -> Dict[str, Any]:
+    def post(self, request, reference: str, receipt: str,  **kwargs) -> Dict[str, Any]:
         if not reference:
             return {"code": "300.001", "message": "Reference is required"}
         try:
             balance_entry_type = self._get_balance_entry_type()
-            active_state = self._get_active_state()
             transaction_history = self._get_latest_transaction(reference)
             print(transaction_history)
             if not transaction_history:
@@ -290,6 +287,7 @@ class ApproveTopupTransaction(InterfaceBase):
                         contribution=transaction_history.wallet_account.contribution,
                         transaction_type="CR",
                         description=description,
+                        receipt=receipt,
                     )
                     if not approved_transaction:
                         raise Exception("Failed to approve transaction")
@@ -301,8 +299,9 @@ class ApproveTopupTransaction(InterfaceBase):
                         reference=reference,
                         description=description,
                     )
-                    # if not approval_result:
-                    #     raise Exception("Unable to process the approved transaction")
+                    print("Approval Result is :", approval_result)
+                    if approval_result is None:
+                        raise Exception("Unable to process the approved transaction")
                     log.info(
                         "Successfully approved transaction %s for contribution %s with amount %s",
                         reference,

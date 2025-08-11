@@ -39,3 +39,4 @@ class RejectTopupTransaction(ProcessorBase):
 	def debit_account_uncleared(self, account, balance_log, amount, **kwargs):
 		"""Debits the account's reserved balance"""
 		return self.debit(account, balance_log, 'uncleared', amount, **kwargs)
+

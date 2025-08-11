@@ -77,13 +77,13 @@ class InitiatePayment(InterfaceBase):
             return False, None
     
     def _validate_inputs(self, contribution_id: int, **kwargs) -> Optional[Dict[str, Any]]:
-        if not contribution_id or not isinstance(contribution_id, int):
+        if not contribution_id:
             return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
         try:
             contribution = ContributionService().get(
                 id=contribution_id,
-                state__name="Active"
             )
+            print(contribution)
             if not contribution:
                 return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
         except Exception:
@@ -101,10 +101,8 @@ class InitiatePayment(InterfaceBase):
     
     def _get_wallet_account(self, contribution) -> Optional[Any]:
         try:
-            active_state = self._get_active_state()
             return WalletAccountService(True).get(
                 contribution=contribution,
-                state=active_state
             )
         except Exception as e:
             log.exception("Error fetching wallet account for contribution %s: %s", contribution.id, e)
@@ -112,16 +110,15 @@ class InitiatePayment(InterfaceBase):
     
     def _check_account_exists(self, contribution) -> bool:
         try:
-            active_state = self._get_active_state()
+            # active_state = self._get_active_state()
             return WalletAccountService().filter(
                 contribution=contribution,
-                state=active_state
             ).exists()
         except Exception as e:
             log.exception("Error checking account existence for contribution %s: %s", contribution.id, e)
             return False
     
-    def _process_transaction(self, contribution, amount: Decimal, phone_number: str) -> Dict[str, Any]:
+    def _process_transaction(self, contribution, amount: Decimal, phone_number: str, ref: str) -> Dict[str, Any]:
         transaction_history = None
         try:
             with transaction.atomic():
@@ -131,7 +128,6 @@ class InitiatePayment(InterfaceBase):
                 balance_entry_type = self._get_balance_entry_type()
                 if not balance_entry_type:
                     return self.ERROR_CODES['BALANCE_ENTRY_TYPE_NOT_FOUND']
-                ref = TransactionRefGenerator().generate()
                 description = f"Contribution Request to {contribution.name} by {phone_number}"
                 detailed_description = f"{description} with ref {ref}"
                 try:
@@ -192,23 +188,21 @@ class InitiatePayment(InterfaceBase):
             return self.ERROR_CODES['TRANSACTION_FAILED']
     
     def post(self, contribution_id: int, request=None, **kwargs) -> Dict[str, Any]:
-        if not isinstance(contribution_id, int) or contribution_id <= 0:
-            return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
         try:
             validation_result = self._validate_inputs(contribution_id, **kwargs)
             if validation_result:
                 return validation_result
             contribution = ContributionService().get(
                 id=contribution_id,
-                state__name="Active"
             )
+            print(contribution)
             if not contribution:
                 return self.ERROR_CODES['CONTRIBUTION_NOT_FOUND']
             if not self._check_account_exists(contribution):
                 return self.ERROR_CODES['ACCOUNT_NOT_EXISTS']
             amount = Decimal(str(kwargs["amount"]))
             phone_number = kwargs["phone_number"].strip()
-            return self._process_transaction(contribution, amount, phone_number)
+            return self._process_transaction(contribution, amount, phone_number, kwargs['ref'])
         except Exception as e:
             log.exception(
                 "Initiatepayment.post exception for contribution %s: %s",
@@ -268,19 +262,16 @@ class ApprovePaymentTransaction(InterfaceBase):
             return {"code": "300.006", "message": "Invalid transaction amount"}
         return {}
 
-    def post(self, request, reference: str, status: str, **kwargs) -> Dict[str, Any]:
+    def post(self, request, reference: str, receipt: str) -> Dict[str, Any]:
         if not reference:
             return {"code": "300.001", "message": "Reference is required"}
-        if not status:
-            return {"code": "300.002", "message": "Status is required"}
         try:
             balance_entry_type = self._get_balance_entry_type()
-            active_state = self._get_active_state()
             transaction_history = self._get_latest_transaction(reference)
             if not transaction_history:
                 return {"code": "300.003", "message": "Transaction not found"}
-            account = self._get_wallet_account(transaction_history.account.contribution, active_state)
-            validation_error = self._validate_transaction_data(transaction_history, balance_entry_type, account)
+            validation_error = self._validate_transaction_data(transaction_history, balance_entry_type, transaction_history.wallet_account)
+            account = transaction_history.wallet_account
             if validation_error:
                 return validation_error
             try:
@@ -294,6 +285,7 @@ class ApprovePaymentTransaction(InterfaceBase):
                         contribution=account.contribution,
                         transaction_type="DR",
                         description=description,
+                        receipt=receipt
                     )
                     if not approved_transaction:
                         raise Exception("Failed to approve transaction")
