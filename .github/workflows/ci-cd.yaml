@@ -1,4 +1,4 @@
-name: Deploy Identity Backend Live Service
+name: Deploy Mchangohub Backend Live Service
 
 on:
   workflow_dispatch:
@@ -44,7 +44,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: osiru/identity:${{ env.docker_tag }}
+          tags: osiru/mchangohub:${{ env.docker_tag }}
           platforms: linux/amd64,linux/arm64/v8
 
       - name: Run deployment commands
