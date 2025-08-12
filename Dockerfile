@@ -14,6 +14,8 @@ RUN pip install --no-compile --no-cache-dir -r requirements.txt
 
 COPY . .
 
+EXPOSE 8055
+
 RUN apt remove -y --purge gcc g++ && apt autoremove -y
 
 RUN mkdir -p /var/www/mchangohub
