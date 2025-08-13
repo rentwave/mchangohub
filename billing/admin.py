@@ -159,17 +159,25 @@ class WalletTransactionAdmin(admin.ModelAdmin, DashboardDataMixin):
         return obj.wallet_account.account_number
     wallet_account_display.short_description = 'Account'
     
-    def approve_topup_transaction(self, obj):
-        return obj.account.approve_topup(obj.amount, obj.reference, "Manual Approval")
+    @admin.action(description="Approve selected topups")
+    def approve_topup_transaction(self, request, queryset):
+        for obj in queryset:
+            obj.wallet_account.topup_approved(obj.amount, obj.reference)
     
-    def reject_topup_transaction(self, obj):
-        return obj.account.reject_topup(obj.amount, obj.reference, "Manual Rejection")
+    @admin.action(description="Reject selected topups")
+    def reject_topup_transaction(self, request, queryset):
+        for obj in queryset:
+            obj.wallet_account.topup_rejected(obj.amount, obj.reference)
     
-    def approve_payment_transaction(self, obj):
-        return obj.account.approve_payment(obj.amount, obj.reference, "Manual Approval")
+    @admin.action(description="Approve selected payments")
+    def approve_payment_transaction(self, request, queryset):
+        for obj in queryset:
+            obj.wallet_account.payment_approved(obj.amount, obj.reference)
     
-    def reject_payment_transaction(self, obj):
-        return obj.account.reject_payment(obj.amount, obj.reference, "Manual Rejection")
+    @admin.action(description="reject selected payments")
+    def reject_payment_transaction(self, request, queryset):
+        for obj in queryset:
+            obj.wallet_account.payment_rejected(obj.amount, obj.reference)
     
     def amount_display(self, obj):
         return self.format_currency(obj.wallet_account.currency, obj.amount)
