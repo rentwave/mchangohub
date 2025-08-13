@@ -32,6 +32,7 @@ class Notification(BaseModel):
     unique_key = models.CharField(
         max_length=255, null=True, blank=True, unique=True,
         help_text="Unique key to identify the notification. Generated when saving the notification")
+    recipients = models.JSONField(default=list, help_text="List of recipients for the notification.")
     sent_time = models.DateTimeField(blank=True, null=True)
     response_data = models.JSONField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)

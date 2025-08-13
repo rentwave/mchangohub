@@ -90,11 +90,11 @@ class OTPManagementService:
             if not token:
                 raise ValueError("Token must be provided for 2FA purpose")
 
-            identity = IdentityService().filter(
+            # TODO: REVIEW WHETHER WE SHOULD CHECK FOR EXPIRES AT HERE - IS IT NECESSARY?
+            identity = IdentityService().get(
                 token=token,
                 status=Identity.Status.ACTIVATION_PENDING,
-                expires_at__gte=timezone.now(),
-            ).first()
+            )
 
             if identity is None:
                 raise Exception("Identity not found")
@@ -128,19 +128,14 @@ class OTPManagementService:
         if otp is None:
             raise Exception("OTP not created due to a database exception")
 
-        if user:
-            NotificationManagementService(user).send_notification(
-                delivery_method=delivery_method,
-                template=f"{delivery_method.lower()}_otp",
-                context={"otp": raw_code},
-            )
-        else:
-            NotificationManagementService(None).send_to_recipients(
-                recipients=[contact],
-                delivery_method=delivery_method,
-                template=f"{delivery_method.lower()}_otp",
-                context={"otp": raw_code},
-            )
+        recipients = [contact] if contact else None
+
+        NotificationManagementService(user).send_notification(
+            delivery_method=delivery_method,
+            template=f"{delivery_method.lower()}_otp",
+            recipients=recipients,
+            context={"otp": raw_code},
+        )
 
         return otp
 
@@ -186,7 +181,11 @@ class OTPManagementService:
             if not token:
                 raise ValueError("Token must be provided for 2FA purpose")
 
-            identity = IdentityService().get(token=token, expires_at__gte=timezone.now())
+            # TODO: REVIEW WHETHER WE SHOULD CHECK FOR EXPIRES AT HERE - IS IT NECESSARY?
+            identity = IdentityService().get(
+                token=token,
+                status=Identity.Status.ACTIVATION_PENDING
+            )
             if identity is None:
                 raise Exception("Identity not found or expired")
 
@@ -219,12 +218,11 @@ class OTPManagementService:
             otp.save()
             raise ValueError("Incorrect OTP.")
 
-        otp.is_used = True
-
         if otp.identity:
             otp.identity.status = Identity.Status.ACTIVE
-            otp.identity.save()
+            otp.identity.extend()
 
+        otp.is_used = True
         otp.save()
 
         return otp

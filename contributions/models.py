@@ -25,4 +25,4 @@ class Contribution(GenericBaseModel):
         ordering = ('-date_created',)
 
     def _str_(self):
-        return '%s - %s' % (self.name, self.creator.username)
+        return '%s - %s' % (self.name, self.creator)

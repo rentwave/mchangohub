@@ -100,24 +100,32 @@ class NotificationManagementService:
         delivery_method: str = Notification.DeliveryMethods.PUSH,
         template: str = "push_default",
         notification_key: Optional[str] = None,
-        frequency: str = Notification.NotificationFrequency.ONCE
+        frequency: str = Notification.NotificationFrequency.ONCE,
+        recipients: Optional[list[str]] = None
     ) -> Optional[Notification]:
         """
-        Create, validate for duplicates, store, and send or queue a notification.
+        Create and send a notification to the intended recipients.
 
-        :param context: Notification context variables.
+        This method validates the delivery method and frequency, checks for duplicate
+        notifications based on the provided key and frequency, determines the recipients
+        if not explicitly provided, persists the notification, and queues it for delivery.
+
+        :param context: Data to populate the notification template.
         :type context: dict
-        :param delivery_method: Notification delivery method (e.g., PUSH, SMS, EMAIL).
+        :param delivery_method: Notification delivery method. Defaults to push.
         :type delivery_method: str
-        :param template: Notification template identifier.
+        :param template: Template name used to render the notification content.
         :type template: str
-        :param notification_key: Optional deduplication key for the notification type.
-        :type notification_key: Optional[str]
-        :param frequency: Frequency for deduplication.
+        :param notification_key: Optional key used for deduplication.
+        :type notification_key: str, optional
+        :param frequency: Frequency at which the notification can be sent.
         :type frequency: str
-        :return: The created Notification object, or None if duplicate.
-        :rtype: Optional[Notification]
-        :raises ValueError: If delivery method or frequency is invalid.
+        :param recipients: Explicit list of recipients. Determined automatically if not provided.
+        :type recipients: list[str], optional
+        :return: Created notification instance if sent or queued, None if skipped due to deduplication
+            or missing recipients.
+        :rtype: Notification or None
+        :raises ValueError: If an invalid delivery method or frequency is provided.
         :raises Exception: If notification creation fails.
         """
         delivery_method = delivery_method.upper()
@@ -134,6 +142,20 @@ class NotificationManagementService:
             if self._is_duplicate(unique_key=unique_key, frequency=frequency):
                 return None
 
+        # If a user is specified, use their contact details for recipients
+        if self.user:
+            if delivery_method == Notification.DeliveryMethods.SMS:
+                recipients = [self.user.phone_number]
+            elif delivery_method == Notification.DeliveryMethods.EMAIL:
+                recipients = [self.user.email]
+            else:
+                device = DeviceService().filter(user=self.user, is_active=True).first()
+                if device: recipients = [device.token]
+
+        if not recipients:
+            logger.error("NotificationManagementService - send_notification exception: No valid recipients found")
+            return None
+
         notification = NotificationService().create(
             user=self.user,
             delivery_method=delivery_method,
@@ -141,31 +163,16 @@ class NotificationManagementService:
             context=context,
             unique_key=unique_key,
             frequency=frequency,
+            recipients=recipients
         )
 
         if notification is None:
             raise Exception("Error creating notification")
 
-        recipient = None
-        if delivery_method == Notification.DeliveryMethods.SMS:
-            recipient = notification.user.phone_number
-        elif delivery_method == Notification.DeliveryMethods.EMAIL:
-            recipient = notification.user.email
-        else:
-            device = DeviceService().filter(user=notification.user, is_active=True).first()
-            if device:
-                recipient = device.token
-
-        if not recipient:
-            logger.error("NotificationManagementService - save_notification exception: No valid recipient found")
-            notification.status = Notification.Status.FAILED
-            notification.save()
-            return notification
-
         notification_data = {
             "unique_identifier": str(notification.id),
             "system": "mchangohub",
-            "recipients": [recipient],
+            "recipients": recipients,
             "notification_type": notification.delivery_method,
             "template": template,
             "context": context,
@@ -177,44 +184,6 @@ class NotificationManagementService:
         notification.save()
 
         return notification
-
-    def send_to_recipients(
-            self,
-            recipients: list[str],
-            context: dict,
-            delivery_method: str = Notification.DeliveryMethods.SMS,
-            template: str = "sms_default"
-    ) -> None:
-        """
-        Send a notification directly to a list of recipients without associating with a User.
-
-        :param recipients: List of recipient identifiers (phone numbers, emails, or device tokens).
-        :type recipients: list[str]
-        :param context: Variables to populate the notification template.
-        :type context: dict
-        :param delivery_method: Delivery method (e.g., PUSH, SMS, EMAIL).
-        :type delivery_method: str
-        :param template: Identifier for the notification template to use.
-        :type template: str
-        :raises ValueError: If delivery method is invalid or the recipients' list is empty.
-        """
-        delivery_method = delivery_method.upper()
-        if delivery_method not in Notification.DeliveryMethods.values:
-            raise ValueError("Invalid delivery method")
-
-        if not recipients:
-            raise ValueError("Recipients list cannot be empty")
-
-        notification_data = {
-            "unique_identifier": "",
-            "system": "mchangohub",
-            "recipients": recipients,
-            "notification_type": delivery_method,
-            "template": template,
-            "context": context,
-        }
-
-        self._send_or_queue(notification_data)
 
     def _send_or_queue(self, notification_data: dict) -> None:
         """

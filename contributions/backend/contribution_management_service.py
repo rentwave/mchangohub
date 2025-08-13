@@ -7,6 +7,7 @@ from django.db import transaction
 from contributions.backend.services import ContributionService
 from contributions.models import Contribution
 from notifications.backend.notification_management_service import NotificationManagementService
+from notifications.models import Notification
 from users.models import User
 from utils.common import normalize_phone_number
 
@@ -63,7 +64,8 @@ class ContributionManagementService:
         phone_numbers = kwargs.get("phone_numbers", [])
         normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
         if normalized_phones:
-            NotificationManagementService(None).send_to_recipients(
+            NotificationManagementService(None).send_notification(
+                delivery_method=Notification.DeliveryMethods.SMS,
                 recipients=normalized_phones,
                 template="sms_contribution_invitation",
                 context={
