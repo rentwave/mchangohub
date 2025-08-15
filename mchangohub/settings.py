@@ -84,6 +84,11 @@ WSGI_APPLICATION = 'mchangohub.wsgi.application'
 AUTH_USER_MODEL = "users.User"
 
 
+CSRF_ALLOWED_HOSTS = ['*']
+
+CSRF_TRUSTED_ORIGINS = [
+	'https://zentu.rentwaveafrica.co.ke'
+]
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
