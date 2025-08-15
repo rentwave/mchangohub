@@ -128,7 +128,7 @@ class PesaWayWalletInterface:
 				phone_number=data.get("phone_number"),
 				channel=channel,
 				reason=reason,
-				results_url="https://9101d202efad.ngrok-free.app/billing/wallet/b2c_transfer_callback_url/"
+				results_url="https://zentu.rentwaveafrica.co.ke/billing/wallet/b2c_transfer_callback_url/"
 			)
 			if response.get('code') != '200.001':
 				lgr.error("C2B Transfer Failed: %s", response)
@@ -177,7 +177,7 @@ class PesaWayWalletInterface:
 				phone_number=data.get("phone_number"),
 				channel=channel,
 				reason=reason,
-				results_url="https://9101d202efad.ngrok-free.app/billing/wallet/c2b_payment_callback/"
+				results_url="https://zentu.rentwaveafrica.co.ke/billing/wallet/c2b_payment_callback/"
 			)
 			if response.get('code') != '200.001':
 				lgr.error("C2B Transfer Failed: %s", response)
