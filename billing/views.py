@@ -215,7 +215,7 @@ class PesaWayWalletInterface:
                 lgr.error("C2B Transfer Failed: %s", response)
                 return JsonResponse({"code": "403.033", "message":"Transaction could not be completed"}, status=500)
             data['ref'] = ref
-            data['ref'] = charge
+            data['charge'] = charge
             topup = InitiateTopup().post(contribution_id=data.get("contribution"), **data)
             return JsonResponse(topup)
         except Exception as e:
