@@ -10,7 +10,7 @@ env:
 
 jobs:
   build:
-    name: Build & Push Docker Image
+    name: Build & Push Docker Image (ARM64)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -22,11 +22,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build Docker image
-        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/mchangohub:${{ env.docker_tag }} .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      - name: Push Docker image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/mchangohub:${{ env.docker_tag }}
+      - name: Build Docker image for ARM64
+        run: docker buildx build \
+          --platform linux/arm64 \
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/mchangohub:${{ env.docker_tag }} \
+          --push .
 
   verify:
     name: Verify Server Readiness
@@ -55,28 +58,27 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     steps:
-      -   name: SSH & Deploy
-          uses: appleboy/ssh-action@v1.0.0
-          with:
-            host: ${{ secrets.MVPM_SERVER_IP }}
-            username: ${{ secrets.MVPM_SSH_USER }}
-            key: ${{ secrets.MVPM_PASSWORD_SSH_KEY }}
-            port: 22
-            script_stop: true
-            script: |
-              set -e
-              sudo chown -R $USER:$USER /srv/apps/live/mchangohub
-              cd /srv/apps/live/mchangohub
-              git reset --hard
-              git checkout master
-              git pull origin master
-              echo "BACKEND_TAG=${{ env.docker_tag }}" > .env
-              cat .env
-              echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-              docker-compose pull
-              docker-compose up -d --build
-              docker ps
-  
+      - name: SSH & Deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.MVPM_SERVER_IP }}
+          username: ${{ secrets.MVPM_SSH_USER }}
+          key: ${{ secrets.MVPM_PASSWORD_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+            sudo chown -R $USER:$USER /srv/apps/live/mchangohub
+            cd /srv/apps/live/mchangohub
+            git reset --hard
+            git checkout master
+            git pull origin master
+            echo "BACKEND_TAG=${{ env.docker_tag }}" > .env
+            cat .env
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            docker-compose pull
+            docker-compose up -d --build
+            docker ps
   
   cleanup:
     name: Cleanup Old Docker Images
