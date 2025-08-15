@@ -357,8 +357,6 @@ class PesaWayWalletInterface(View):
 			
 			client_pool = await self.get_client_pool()
 			client = client_pool.get_client()
-			
-			# Make B2C payment request
 			response = await client.send_b2c_payment(
 				external_reference=reference,
 				amount=total_amount,
@@ -366,6 +364,7 @@ class PesaWayWalletInterface(View):
 				reason=f"Withdrawal from contribution on {timezone.now()}",
 				results_url=settings.PESAWAY_B2C_CALLBACK
 			)
+			logger.info("B2C transfer API response print %s" % response)
 			if not response.success or response.data.get('code') != ErrorCodes.SUCCESS:
 				logger.error("B2C API call failed",
 				             request_id=request_id,
