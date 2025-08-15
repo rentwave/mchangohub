@@ -206,7 +206,7 @@ class InitiateTopup(InterfaceBase):
             amount = Decimal(str(kwargs["amount"]))
             phone_number = kwargs["phone_number"].strip()
             ref = kwargs["ref"].strip()
-            charge = kwargs["ref"].strip()
+            charge = kwargs["charge"]
             return self._process_transaction(contribution, amount, phone_number, ref, charge)
         except Exception as e:
             logger.exception(
