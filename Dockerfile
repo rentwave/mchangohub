@@ -18,4 +18,9 @@ RUN apt remove -y --purge gcc g++ && apt autoremove -y
 
 RUN mkdir -p /var/www/mchangohub
 
-CMD ["./run.sh"]
+CMD python manage.py collectstatic --no-input && \
+    gunicorn \
+    --bind 0.0.0.0:8095 \
+    --access-logfile - \
+    --timeout 3600 \
+    mchangohub.wsgi:application -w 2
