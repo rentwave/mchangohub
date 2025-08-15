@@ -10,14 +10,12 @@ RUN apt update && apt install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-RUN pip install -r requirements.txt
+RUN python3 -m pip install --no-compile --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8055
-
 RUN apt remove -y --purge gcc g++ && apt autoremove -y
 
-RUN mkdir -p /var/www/mchangohub
+RUN mkdir -p /var/www/identity
 
 CMD ["./run.sh"]
