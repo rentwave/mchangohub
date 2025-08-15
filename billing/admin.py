@@ -24,7 +24,7 @@ class WalletTransactionInline(admin.TabularInline):
     model = WalletTransaction
     extra = 0
     readonly_fields = [
-        'transaction_type', 'amount', 'balance_before', 'balance_after',
+        'transaction_type', 'amount', 'charge', 'balance_before', 'balance_after',
         'reference', 'status', 'date_created'
     ]
     can_delete = False
@@ -65,7 +65,8 @@ class DashboardDataMixin:
             total_transactions=Count('id'),
             pending_transactions=Count('id', filter=Q(status='pending')),
             completed_transactions=Count('id', filter=Q(status='completed')),
-            total_volume=Sum('amount')
+            total_volume=Sum('amount'),
+            total_charges=Sum('charge')
         )
 
     def get_recent_transactions(self, limit=10):
@@ -141,12 +142,12 @@ class WalletTransactionAdmin(admin.ModelAdmin, DashboardDataMixin):
     """Admin for wallet transactions."""
     list_display = [
         'wallet_account_display', 'transaction_type', 'amount_display',
-        'status_display', 'reference', 'workflow_actions_count', 'date_created'
+        'status_display', 'reference', 'charge', 'balance_before', 'balance_after', 'workflow_actions_count', 'date_created'
     ]
     list_filter = ['transaction_type', 'status', 'date_created']
     search_fields = ['wallet_account__account_number', 'reference', 'description']
     readonly_fields = [
-        'wallet_account', 'transaction_type', 'amount', 'balance_before',
+        'wallet_account', 'transaction_type', 'amount', 'balance_before', 'charge',
         'balance_after', 'reference', 'description', 'status', 'metadata'
     ]
     inlines = [WorkflowActionLogInline]

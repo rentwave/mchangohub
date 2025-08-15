@@ -190,6 +190,7 @@ class InterfaceBase(AuditManagementService):
 			amount: Decimal,
 			reference: str,
 			description: Optional[str],
+			charge,
 			**kwargs
 	) -> WalletTransaction:
 		"""Creates the transaction history for the interface transaction."""
@@ -199,10 +200,10 @@ class InterfaceBase(AuditManagementService):
 			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
 			if transaction_type == "CR":
 				transaction_history = account.initiate_topup(
-					amount=amount, reference=reference, description=description
+					amount=amount, reference=reference, description=description, charge=charge
 				)
 			else:
-				transaction_history = account.initiate_payment(amount=amount, reference=reference, description=description)
+				transaction_history = account.initiate_payment(amount=amount, reference=reference, description=description, charge=charge)
 			if transaction_history is None:
 				raise Exception(
 					'%s Could not create a process for: %s' % (self.__class__.__name__, contribution)

@@ -186,4 +186,14 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
+# PESAWAY_CLIENT_SECRET= os.environ.get('PESAWAY_CLIENT_SECRET')
+# PESAWAY_CLIENT_ID= os.environ.get('PESAWAY_CLIENT_ID')
+# PESAWAY_BASE_URL= os.environ.get('PESAWAY_BASE_URL')
+# PESAWAY_B2C_CALLBACK= os.environ.get('PESAWAY_B2C_CALLBACK')
+# PESAWAY_C2B_CALLBACK= os.environ.get('PESAWAY_C2B_CALLBACK')
 
+PESAWAY_CLIENT_SECRET = "S9zRS9Q3f7DBkC7I"
+PESAWAY_CLIENT_ID = "4yN4wTqhNDRRKY6oMksGVbTa9Q8xP0px"
+PESAWAY_BASE_URL = "https://api.sandbox.pesaway.com"
+PESAWAY_B2C_CALLBACK = "https://zentu.rentwaveafrica.co.ke/billing/wallet/b2c_transfer_callback_url/"
+PESAWAY_C2B_CALLBACK = "https://zentu.rentwaveafrica.co.ke/billing/wallet/c2b_payment_callback/"

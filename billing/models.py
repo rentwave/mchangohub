@@ -220,7 +220,7 @@ class WalletAccount(BaseModel):
 		WorkflowActionLog.objects.bulk_create(workflow_actions)
 	
 	@transaction.atomic
-	def initiate_topup(self, amount, reference, description="TopUp - Pending"):
+	def initiate_topup(self, amount, reference, charge , description="TopUp - Pending"):
 		"""
 		Step 1: TopUp - Add money to current and uncleared (pending approval).
 		Creates new transaction with status 'pending'
@@ -245,6 +245,7 @@ class WalletAccount(BaseModel):
 			balance_before=old_current,
 			balance_after=account.current,
 			reference=reference,
+			charge=charge,
 			description=description,
 			status=state,
 			metadata={
@@ -416,7 +417,7 @@ class WalletAccount(BaseModel):
 		return transaction_obj
 	
 	@transaction.atomic
-	def initiate_payment(self, amount, reference, description="Payment - Pending"):
+	def initiate_payment(self, amount, reference, charge, description="Payment - Pending"):
 		"""
 		Step 3: Payment - Move money from available to reserved.
 		Creates new transaction with status 'pending'
@@ -445,6 +446,7 @@ class WalletAccount(BaseModel):
 			balance_after=account.current,
 			reference=reference,
 			description=description,
+			charge=charge,
 			status=state,
 			metadata={
 				'workflow_step': 'initiate_payment',
@@ -709,6 +711,7 @@ class WalletTransaction(BaseModel):
 	amount = models.DecimalField(max_digits=18, decimal_places=2)
 	balance_before = models.DecimalField(max_digits=18, decimal_places=2)
 	balance_after = models.DecimalField(max_digits=18, decimal_places=2)
+	charge = models.DecimalField(max_digits=18, decimal_places=2, db_index=True, null=True, blank=True)
 	reference = models.CharField(max_length=100, unique=True, db_index=True)
 	receipt_number = models.CharField(max_length=100, db_index=True)
 	description = models.CharField(max_length=255, blank=True)

@@ -21,6 +21,11 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - DB_IGNORE_SSL=true
+      - PESAWAY_CLIENT_SECRET=S9zRS9Q3f7DBkC7I
+      - PESAWAY_CLIENT_ID=4yN4wTqhNDRRKY6oMksGVbTa9Q8xP0px
+      - PESAWAY_BASE_URL=https://api.sandbox.pesaway.com
+      - PESAWAY_B2C_CALLBACK=https://zentu.rentwaveafrica.co.ke/billing/wallet/b2c_transfer_callback_url/
+      - PESAWAY_C2B_CALLBACK=https://zentu.rentwaveafrica.co.ke/billing/wallet/c2b_payment_callback/
     volumes:
       - .:/usr/src/app
       - ./staticfiles:/usr/src/app/staticfiles
