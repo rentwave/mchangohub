@@ -3,7 +3,7 @@ name: Deploy Mchangohub Backend
 on:
   push:
     branches:
-      - main
+      - master
 
 env:
   docker_tag: ${{ github.sha }}
