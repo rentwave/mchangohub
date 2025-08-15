@@ -1,7 +1,7 @@
 #!/bin/bash
 
 python manage.py collectstatic --no-input
-PORT=8055
+PORT=8095
 exec gunicorn \
     --bind 0.0.0.0:$PORT \
     --access-logfile - \

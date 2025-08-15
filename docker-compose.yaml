@@ -6,7 +6,7 @@ services:
     image: osiru/mchangohub:${BACKEND_TAG}
     working_dir: /usr/src/app
     ports:
-      - "8055:8055"
+      - "8095:8095"
     depends_on:
       - postgres
     environment:
