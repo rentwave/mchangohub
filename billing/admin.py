@@ -66,7 +66,7 @@ class DashboardDataMixin:
             pending_transactions=Count('id', filter=Q(status='pending')),
             completed_transactions=Count('id', filter=Q(status='completed')),
             total_volume=Sum('amount'),
-            total_charges=Sum('charge')
+            total_charge=Sum('charge')
         )
 
     def get_recent_transactions(self, limit=10):
@@ -313,7 +313,8 @@ class WalletAccountAdmin(admin.ModelAdmin, DashboardDataMixin):
     def get_transaction_stats(self):
         return WalletTransaction.objects.aggregate(
             total_transactions=Count('id'),
-            total_amount=Sum('amount')
+            total_amount=Sum('amount'),
+            total_charge=Sum('charge')
         )
 
     def get_recent_transactions(self):
