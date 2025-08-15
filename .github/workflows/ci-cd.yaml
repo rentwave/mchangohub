@@ -1,83 +1,97 @@
-name: Deploy Mchangohub Backend Live Service
+name: Deploy Mchangohub Backend
 
 on:
-  workflow_dispatch:
   push:
     branches:
-      - master
+      - main
 
-concurrency:
-  group: '${{ github.workflow }}-${{ github.head_ref || github.ref }}'
-  cancel-in-progress: true
+env:
+  docker_tag: ${{ github.sha }}
 
 jobs:
-  build-and-deploy:
-    name: Build and Deploy
-    runs-on: ubuntu-22.04
-
+  build:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Declare docker tag variable
-        id: vars
-        shell: bash
-        run: |
-          GIT_HASH=$(git rev-parse --short "${GITHUB_SHA}")
-          echo "docker_tag=$(echo ${GITHUB_REF##*/}-${GIT_HASH})" >> $GITHUB_ENV
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
+      - name: Log in to DockerHub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push multi-platform image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: osiru/mchangohub:${{ env.docker_tag }}
-          platforms: linux/amd64,linux/arm64/v8
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/mchangohub:${{ env.docker_tag }} .
 
-      - name: Run deployment commands
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/mchangohub:${{ env.docker_tag }}
+
+  verify:
+    name: Verify Server Readiness
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH & Verify Environment
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.MVPM_SERVER_IP }}
           username: ${{ secrets.MVPM_SSH_USER }}
-          port: 22
           key: ${{ secrets.MVPM_PASSWORD_SSH_KEY }}
+          port: 22
           script_stop: true
           script: |
             set -e
-            sudo chown -R $USER:$USER /srv/apps/live/mchangohub
-            cd /srv/apps/live/mchangohub
-            echo "BACKEND_TAG=${{ env.docker_tag }}" > .env
-            cat .env
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-            docker-compose pull
-            docker-compose up -d --build
+            echo "Verifying Docker is installed..."
+            docker --version
+            echo "Checking existing containers..."
+            docker ps
+            echo "Verifying mchangohub directory exists..."
+            ls -la /srv/apps/live/mchangohub
 
-  clean-up:
-    name: Clean up Docker Cache
-    runs-on: ubuntu-22.04
-    needs: build-and-deploy
-
+  deploy:
+    name: Deploy New Version
+    needs: verify
+    runs-on: ubuntu-latest
     steps:
-      - name: SSH and Prune Docker Resources
+      -   name: SSH & Deploy
+          uses: appleboy/ssh-action@v1.0.0
+          with:
+            host: ${{ secrets.MVPM_SERVER_IP }}
+            username: ${{ secrets.MVPM_SSH_USER }}
+            key: ${{ secrets.MVPM_PASSWORD_SSH_KEY }}
+            port: 22
+            script_stop: true
+            script: |
+              set -e
+              sudo chown -R $USER:$USER /srv/apps/live/mchangohub
+              cd /srv/apps/live/mchangohub
+              git reset --hard
+              git checkout master
+              git pull origin master
+              echo "BACKEND_TAG=${{ env.docker_tag }}" > .env
+              cat .env
+              echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+              docker-compose pull
+              docker-compose up -d --build
+              docker ps
+  
+  
+  cleanup:
+    name: Cleanup Old Docker Images
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH & Cleanup
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.MVPM_SERVER_IP }}
           username: ${{ secrets.MVPM_SSH_USER }}
-          port: 22
           key: ${{ secrets.MVPM_PASSWORD_SSH_KEY }}
+          port: 22
+          script_stop: true
           script: |
-            docker image prune -af
-            docker builder prune -af
+            echo "Cleaning up old Docker images and stopped containers..."
+            docker system prune -af
+            docker volume prune -f
