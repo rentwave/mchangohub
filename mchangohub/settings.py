@@ -98,7 +98,7 @@ CSRF_TRUSTED_ORIGINS = [
 #         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
-
+#
 DATABASES = {
 	'default': {
 		'ENGINE': 'django.db.backends.postgresql',
@@ -110,6 +110,26 @@ DATABASES = {
 	}
 }
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': os.environ.get('REDIS_URL', 'redis://localhost:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 100,
+                'retry_on_timeout': True,
+            },
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+        },
+        'KEY_PREFIX': 'pesaway',
+        'VERSION': 1,
+    }
+}
+
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'default'
+SESSION_COOKIE_AGE = 3600  # 1 hour
 
 
 # Password validation
@@ -192,8 +212,20 @@ CELERY_TIMEZONE = 'UTC'
 # PESAWAY_B2C_CALLBACK= os.environ.get('PESAWAY_B2C_CALLBACK')
 # PESAWAY_C2B_CALLBACK= os.environ.get('PESAWAY_C2B_CALLBACK')
 
+# PESAWAY_BASE_URL = os.getenv('PESAWAY_BASE_URL', 'https://api.pesaway.com')
+PESAWAY_RATE_LIMIT_PER_MINUTE = int(os.getenv('PESAWAY_RATE_LIMIT_PER_MINUTE', 1000))
+
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+
+PESAWAY_MAX_CONNECTIONS = int(os.getenv('PESAWAY_MAX_CONNECTIONS', 100))
+PESAWAY_MAX_CONCURRENT_REQUESTS = int(os.getenv('PESAWAY_MAX_CONCURRENT_REQUESTS', 50))
+PESAWAY_REQUEST_TIMEOUT = int(os.getenv('PESAWAY_REQUEST_TIMEOUT', 30))
+
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = int(os.getenv('CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5))
+CIRCUIT_BREAKER_TIMEOUT = int(os.getenv('CIRCUIT_BREAKER_TIMEOUT', 60))
+
 PESAWAY_CLIENT_SECRET = "S9zRS9Q3f7DBkC7I"
 PESAWAY_CLIENT_ID = "4yN4wTqhNDRRKY6oMksGVbTa9Q8xP0px"
 PESAWAY_BASE_URL = "https://api.sandbox.pesaway.com"
-PESAWAY_B2C_CALLBACK = "https://zentu.rentwaveafrica.co.ke/billing/wallet/b2c_transfer_callback_url/"
-PESAWAY_C2B_CALLBACK = "https://zentu.rentwaveafrica.co.ke/billing/wallet/c2b_payment_callback/"
+PESAWAY_B2C_CALLBACK = "https://zentu.rentwaveafrica.co.ke/billing/api/v1/callbacks/b2c/"
+PESAWAY_C2B_CALLBACK = "https://zentu.rentwaveafrica.co.ke/billing/api/v1/callbacks/c2b/"

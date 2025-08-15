@@ -30,3 +30,8 @@ wcwidth==0.2.13
 psycopg2-binary==2.9.3
 gunicorn==22.0.0
 whitenoise==6.7.0
+aiohttp==3.9.5
+redis==5.0.8
+tenacity==9.0.0
+prometheus-client==0.20.0
+structlog==24.1.0
