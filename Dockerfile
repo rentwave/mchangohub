@@ -16,6 +16,6 @@ COPY . .
 
 RUN apt remove -y --purge gcc g++ && apt autoremove -y
 
-RUN mkdir -p /var/www/identity
+RUN mkdir -p /var/www/mchangohub
 
 CMD ["./run.sh"]

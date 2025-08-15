@@ -6,4 +6,4 @@ exec gunicorn \
     --bind 0.0.0.0:$PORT \
     --access-logfile - \
     --timeout 3600 \
-    identity.wsgi:application -w 2
+    mchangohub.wsgi:application -w 2
