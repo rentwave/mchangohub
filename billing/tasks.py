@@ -62,7 +62,7 @@ def check_transaction_status() -> APIResponse:
         time_threshold = timezone.now() - timedelta(minutes=2)  #  Nairobi-aware timestamp
         for trx_type, processor in transaction_processors.items():
             pending_transactions = WalletTransactionService().filter(
-                state__name="Pending",
+                status__name="Pending",
                 transaction_type=trx_type,
                 date_created__gte=time_threshold
             )
