@@ -9,6 +9,7 @@ services:
       - "8095:8095"
     depends_on:
       - postgres
+      - redis
     environment:
       - ENV=production
       - DEBUG=0
@@ -39,9 +40,10 @@ services:
         limits:
           memory: 2G
           cpus: "1.5"
-          
+
   postgres:
     image: postgres:16
+    container_name: postgres
     ports:
       - "5481:5432"
     volumes:
@@ -52,11 +54,12 @@ services:
       - POSTGRES_DB=postgres
     networks:
       - mchango_hub_net
+    restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 1G
-          
+
   redis:
     image: redis:7.0-alpine
     container_name: redis
@@ -66,11 +69,11 @@ services:
       - "6389:6379"
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       retries: 5
       start_period: 30s
-  
+
   celery_worker_mchango:
     image: osiru/mchangohub:${BACKEND_TAG}
     container_name: celery_worker_mchango
@@ -81,15 +84,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_started
     networks:
       - mchango_hub_net
     restart: unless-stopped
 
-  
-
-
 volumes:
-  portainer_data:
   mchango_hub_pg:
   mchango_hub_logs:
     driver: local
