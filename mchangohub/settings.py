@@ -193,19 +193,11 @@ QUEUE_NOTIFICATIONS = False
 NOTIFY_BASE_URL = "https://notify.rentwaveafrica.co.ke"
 
 
-""" RabbitMQ configs """
-RABBITMQ_USER = os.environ.get('RABBITMQ_USER')
-RABBITMQ_PASSWORD = os.environ.get('RABBITMQ_PASSWORD')
-RABBITMQ_HOST = os.environ.get('RABBITMQ_HOST')
-RABBITMQ_VHOST = os.environ.get('RABBITMQ_VHOST')
-RABBITMQ_PORT = os.environ.get('RABBITMQ_PORT')
-
 """ Celery configs """
-# CELERY_BROKER_URL = f'amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}/{RABBITMQ_VHOST}'
+CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://redis:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Africa/Nairobi'
-CELERY_BROKER_URL = os.environ.get('REDIS_URL')
 
 # PESAWAY_CLIENT_SECRET= os.environ.get('PESAWAY_CLIENT_SECRET')
 # PESAWAY_CLIENT_ID= os.environ.get('PESAWAY_CLIENT_ID')
