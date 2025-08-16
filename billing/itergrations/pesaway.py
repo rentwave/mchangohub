@@ -14,8 +14,13 @@ import structlog
 
 from mchangohub import settings
 
-API_REQUESTS_TOTAL = Counter('pesaway_api_requests_total', 'Total API requests', ['method', 'endpoint', 'status'])
-API_REQUEST_DURATION = Histogram('pesaway_api_request_duration_seconds', 'API request duration', ['method', 'endpoint'])
+# Prometheus metrics
+API_REQUESTS_TOTAL = Counter(
+    'pesaway_api_requests_total', 'Total API requests', ['method', 'endpoint', 'status']
+)
+API_REQUEST_DURATION = Histogram(
+    'pesaway_api_request_duration_seconds', 'API request duration', ['method', 'endpoint']
+)
 ACTIVE_CONNECTIONS = Gauge('pesaway_active_connections', 'Active connections')
 CIRCUIT_BREAKER_STATE = Gauge('pesaway_circuit_breaker_state', 'Circuit breaker state', ['endpoint'])
 
@@ -47,7 +52,6 @@ class APIResponse:
 
 
 class CircuitBreakerError(Exception):
-    """Raised when circuit breaker is open"""
     pass
 
 
@@ -57,11 +61,11 @@ class CircuitBreaker:
         self.timeout = timeout
         self.failure_count = 0
         self.last_failure_time = None
-        self.state = 'CLOSED'  # CLOSED, OPEN, HALF_OPEN
+        self.state = 'CLOSED'
         self._lock = asyncio.Lock()
 
     async def call(self, func, *args, **kwargs):
-        async with self._lock:  # ensure consistent state updates
+        async with self._lock:
             if self.state == 'OPEN':
                 if (time.time() - self.last_failure_time) > self.timeout:
                     self.state = 'HALF_OPEN'
@@ -74,7 +78,6 @@ class CircuitBreaker:
         except Exception as e:
             async with self._lock:
                 self.record_failure()
-                # If failure happens in HALF_OPEN → immediately OPEN again
                 if self.state == "HALF_OPEN":
                     self.state = "OPEN"
                     self.last_failure_time = time.time()
@@ -109,7 +112,7 @@ class TokenManager:
 
     async def get_token(self) -> Optional[str]:
         try:
-            token_data = await self.redis_client.get(self.token_key)  # ✅ async get
+            token_data = await self.redis_client.get(self.token_key)
             if token_data:
                 return json.loads(token_data)['token']
         except Exception as e:
@@ -122,7 +125,7 @@ class TokenManager:
                 'token': token,
                 'expires_at': time.time() + expires_in - 300
             }
-            await self.redis_client.setex(  # ✅ async setex
+            await self.redis_client.setex(
                 self.token_key,
                 expires_in - 300,
                 json.dumps(token_data)
@@ -151,9 +154,7 @@ class PesaWayAPIClient:
         self.max_retries = max_retries
         self.redis_client = redis.from_url(redis_url, decode_responses=True)
 
-        self.token_manager = TokenManager(
-            self.redis_client, client_id, client_secret
-        )
+        self.token_manager = TokenManager(self.redis_client, client_id, client_secret)
 
         self.connector = aiohttp.TCPConnector(
             limit=max_connections,
@@ -207,34 +208,39 @@ class PesaWayAPIClient:
         token = await self.token_manager.get_token()
         if not token:
             token = await self._authenticate()
+        try:
+            task_id = id(asyncio.current_task())
+        except RuntimeError:
+            task_id = 0
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
-            "X-Request-ID": f"{int(time.time())}-{id(asyncio.current_task())}",
+            "X-Request-ID": f"{int(time.time())}-{task_id}",
         }
 
     async def _make_request(
-            self,
-            method: str,
-            endpoint: str,
-            payload: Optional[Dict] = None,
-            retries: int = 0,
+        self,
+        method: str,
+        endpoint: str,
+        payload: Optional[Dict] = None,
+        retries: int = 0,
     ) -> APIResponse:
         start_time = time.time()
-        request_id = f"{int(start_time)}-{id(asyncio.current_task())}"
-        rate_limit_key = f"rate_limit:{self.client_id}"
+        try:
+            task_id = id(asyncio.current_task())
+        except RuntimeError:
+            task_id = 0
+        request_id = f"{int(start_time)}-{task_id}"
 
         # --- Redis rate limit ---
-        current_requests = await self.redis_client.incr(rate_limit_key)
-        if current_requests == 1:
-            await self.redis_client.expire(rate_limit_key, 60)
-        if current_requests > settings.PESAWAY_RATE_LIMIT_PER_MINUTE:
-            return APIResponse(
-                success=False,
-                error="Rate limit exceeded",
-                status_code=429,
-                request_id=request_id,
-            )
+        try:
+            current_requests = await self.redis_client.incr(f"rate_limit:{self.client_id}")
+            if current_requests == 1:
+                await self.redis_client.expire(f"rate_limit:{self.client_id}", 60)
+            if current_requests > settings.PESAWAY_RATE_LIMIT_PER_MINUTE:
+                return APIResponse(False, error="Rate limit exceeded", status_code=429, request_id=request_id)
+        except Exception as e:
+            logger.error("Redis rate limit failed", error=str(e))
 
         circuit_breaker = self.get_circuit_breaker(endpoint)
 
@@ -249,66 +255,29 @@ class PesaWayAPIClient:
                         return await self._session.get(url, headers=headers)
                     return await self._session.post(url, json=payload, headers=headers)
 
-                # ✅ Await properly inside breaker
-                response = await circuit_breaker.call(lambda: make_http_request())
-
+                # ✅ Correctly await coroutine
+                response = await circuit_breaker.call(make_http_request)
                 response_time = time.time() - start_time
-
-                # --- Handle auth retry ---
                 if response.status == 401 and retries < 1:
                     await self._authenticate()
                     return await self._make_request(method, endpoint, payload, retries + 1)
-
                 response.raise_for_status()
                 data = await response.json()
-
-                # --- Metrics ---
-                API_REQUESTS_TOTAL.labels(
-                    method=method, endpoint=endpoint, status="success"
-                ).inc()
-                API_REQUEST_DURATION.labels(
-                    method=method, endpoint=endpoint
-                ).observe(response_time)
-
-                return APIResponse(
-                    success=True,
-                    data=data,
-                    status_code=response.status,
-                    response_time=response_time,
-                    request_id=request_id,
-                )
-
+                API_REQUESTS_TOTAL.labels(method=method, endpoint=endpoint, status="success").inc()
+                API_REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(response_time)
+                return APIResponse(True, data=data, status_code=response.status, response_time=response_time, request_id=request_id)
             except CircuitBreakerError:
-                return APIResponse(
-                    success=False,
-                    error="Service temporarily unavailable",
-                    status_code=503,
-                    request_id=request_id,
-                )
+                return APIResponse(False, error="Service temporarily unavailable", status_code=503, request_id=request_id)
 
             except aiohttp.ClientResponseError as e:
                 circuit_breaker.record_failure()
-                API_REQUESTS_TOTAL.labels(
-                    method=method, endpoint=endpoint, status="error"
-                ).inc()
-                return APIResponse(
-                    success=False,
-                    error=f"HTTP {e.status}: {str(e)}",
-                    status_code=e.status,
-                    request_id=request_id,
-                )
+                API_REQUESTS_TOTAL.labels(method=method, endpoint=endpoint, status="error").inc()
+                return APIResponse(False, error=f"HTTP {e.status}: {str(e)}", status_code=e.status, request_id=request_id)
 
             except Exception as e:
                 circuit_breaker.record_failure()
-                API_REQUESTS_TOTAL.labels(
-                    method=method, endpoint=endpoint, status="error"
-                ).inc()
-                return APIResponse(
-                    success=False,
-                    error=str(e),
-                    status_code=500,
-                    request_id=request_id,
-                )
+                API_REQUESTS_TOTAL.labels(method=method, endpoint=endpoint, status="error").inc()
+                return APIResponse(False, error=str(e), status_code=500, request_id=request_id)
 
             finally:
                 ACTIVE_CONNECTIONS.dec()
@@ -511,7 +480,7 @@ class PesaWayClientPool:
         for client in self.clients:
             await client.__aexit__(exc_type, exc_val, exc_tb)
 
-    def get_client(self) -> "PesaWayAPIClient":
+    def get_client(self) -> PesaWayAPIClient:
         """Get next client in round-robin fashion"""
         client = self.clients[self.current_client]
         self.current_client = (self.current_client + 1) % len(self.clients)
