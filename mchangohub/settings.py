@@ -153,14 +153,14 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Nairobi'
 
 USE_I18N = True
 
 USE_TZ = True
+
 
 
 # Static files (CSS, JavaScript, Images)
@@ -213,6 +213,8 @@ CELERY_TIMEZONE = 'UTC'
 # PESAWAY_C2B_CALLBACK= os.environ.get('PESAWAY_C2B_CALLBACK')
 
 # PESAWAY_BASE_URL = os.getenv('PESAWAY_BASE_URL', 'https://api.pesaway.com')
+
+
 PESAWAY_RATE_LIMIT_PER_MINUTE = int(os.getenv('PESAWAY_RATE_LIMIT_PER_MINUTE', 1000))
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')

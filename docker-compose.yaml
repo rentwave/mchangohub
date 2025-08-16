@@ -53,6 +53,20 @@ services:
       interval: 10s
       retries: 5
       start_period: 30s
+  
+  celery_worker_mchango:
+    image: osiru/mchangohub:${BACKEND_TAG}
+    container_name: celery_worker_mchango
+    working_dir: /usr/src/app
+    command: celery -A mchangohub worker --loglevel=info --concurrency=2
+    volumes:
+      - .:/usr/src/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - mchango_hub_net
+    restart: unless-stopped
 
   postgres:
     image: postgres:16
