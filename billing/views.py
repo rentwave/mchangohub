@@ -435,15 +435,11 @@ class PesaWayWalletInterface(View):
             logger.info(f"C2B callback received: {request_id}")
             if (data.get("ResultCode") == TransactionStatus.SUCCESS and
                     "successfully" in data.get("ResultDesc", "").lower()):
-
                 reference = data.get("OriginatorReference")
                 receipt = data.get("TransactionID")
-
-                # Approve transaction
                 approval_result = ApproveTopupTransaction().post(
                     request, reference=reference, receipt=receipt
                 )
-
                 logger.info(f"C2B transaction approved: {request_id}")
                 return self.create_success_response({
                     "status": "APPROVED",
