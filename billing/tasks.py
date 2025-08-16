@@ -58,10 +58,8 @@ def check_transaction_status() -> APIResponse:
             "topup": ApproveTopupTransaction(),
             "payment": ApprovePaymentTransaction(),
         }
-
         processed_count = 0
-        time_threshold = timezone.now() - timedelta(minutes=10)  #  Nairobi-aware timestamp
-
+        time_threshold = timezone.now() - timedelta(minutes=2)  #  Nairobi-aware timestamp
         for trx_type, processor in transaction_processors.items():
             pending_transactions = WalletTransactionService().filter(
                 state__name="Pending",
@@ -79,7 +77,6 @@ def check_transaction_status() -> APIResponse:
                     if result_code != 0:
                         logger.info(f"Skipping {trx_type} {trx.id}, not successful → {response}")
                         continue
-
                     reference = response.get("OriginatorReference")
                     receipt = response.get("TransactionID")
 
@@ -88,7 +85,6 @@ def check_transaction_status() -> APIResponse:
                             f"{trx_type.capitalize()} {trx.id} missing reference/receipt in response → {response}"
                         )
                         continue
-
                     if trx.state.name.lower() == "pending":
                         approval_result = processor.post(request=None, reference=reference, receipt=receipt)
                         logger.info(
