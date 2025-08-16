@@ -214,26 +214,30 @@ class PesaWayAPIClient:
         }
 
     async def _make_request(
-        self,
-        method: str,
-        endpoint: str,
-        payload: Optional[Dict] = None,
-        retries: int = 0,
-    ):
+            self,
+            method: str,
+            endpoint: str,
+            payload: Optional[Dict] = None,
+            retries: int = 0,
+    ) -> APIResponse:
         start_time = time.time()
         request_id = f"{int(start_time)}-{id(asyncio.current_task())}"
         rate_limit_key = f"rate_limit:{self.client_id}"
+
+        # --- Redis rate limit ---
         current_requests = await self.redis_client.incr(rate_limit_key)
         if current_requests == 1:
             await self.redis_client.expire(rate_limit_key, 60)
         if current_requests > settings.PESAWAY_RATE_LIMIT_PER_MINUTE:
             return APIResponse(
-                False,
+                success=False,
                 error="Rate limit exceeded",
                 status_code=429,
                 request_id=request_id,
             )
+
         circuit_breaker = self.get_circuit_breaker(endpoint)
+
         async with self.semaphore:
             ACTIVE_CONNECTIONS.inc()
             try:
@@ -243,19 +247,22 @@ class PesaWayAPIClient:
                 async def make_http_request():
                     if method.upper() == "GET":
                         return await self._session.get(url, headers=headers)
-                    else:
-                        return await self._session.post(
-                            url, json=payload, headers=headers
-                        )
-                response = await circuit_breaker.call(make_http_request)
+                    return await self._session.post(url, json=payload, headers=headers)
+
+                # ✅ Await properly inside breaker
+                response = await circuit_breaker.call(lambda: make_http_request())
+
                 response_time = time.time() - start_time
+
+                # --- Handle auth retry ---
                 if response.status == 401 and retries < 1:
                     await self._authenticate()
-                    return await self._make_request(
-                        method, endpoint, payload, retries + 1
-                    )
+                    return await self._make_request(method, endpoint, payload, retries + 1)
+
                 response.raise_for_status()
                 data = await response.json()
+
+                # --- Metrics ---
                 API_REQUESTS_TOTAL.labels(
                     method=method, endpoint=endpoint, status="success"
                 ).inc()
@@ -264,7 +271,7 @@ class PesaWayAPIClient:
                 ).observe(response_time)
 
                 return APIResponse(
-                    True,
+                    success=True,
                     data=data,
                     status_code=response.status,
                     response_time=response_time,
@@ -273,7 +280,7 @@ class PesaWayAPIClient:
 
             except CircuitBreakerError:
                 return APIResponse(
-                    False,
+                    success=False,
                     error="Service temporarily unavailable",
                     status_code=503,
                     request_id=request_id,
@@ -285,7 +292,7 @@ class PesaWayAPIClient:
                     method=method, endpoint=endpoint, status="error"
                 ).inc()
                 return APIResponse(
-                    False,
+                    success=False,
                     error=f"HTTP {e.status}: {str(e)}",
                     status_code=e.status,
                     request_id=request_id,
@@ -297,13 +304,14 @@ class PesaWayAPIClient:
                     method=method, endpoint=endpoint, status="error"
                 ).inc()
                 return APIResponse(
-                    False, error=str(e), status_code=500, request_id=request_id
+                    success=False,
+                    error=str(e),
+                    status_code=500,
+                    request_id=request_id,
                 )
 
             finally:
                 ACTIVE_CONNECTIONS.dec()
-
-
 
     async def get_account_balance(self) -> APIResponse:
         return await self._make_request("GET", "/api/v1/account-balance/")

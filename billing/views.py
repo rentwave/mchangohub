@@ -314,17 +314,17 @@ class PesaWayWalletInterface(View):
 			duration = time.time() - start_time
 			logger.info("Mobile money transfer completed",
 			            request_id=request_id, duration=duration)
-	
-	@method_decorator(csrf_exempt)
-	@method_decorator(require_http_methods(["POST"]))
+
+	@method_decorator(csrf_exempt, name='dispatch')
+	@method_decorator(require_http_methods(["POST"]), name='dispatch')
 	@async_view
-	@rate_limit(100) 
+	@rate_limit(100)
 	@validate_request_data(['amount', 'phone_number', 'contribution'])
 	async def b2c_transfer(self, request):
 		"""Enhanced B2C transfer with async processing"""
 		request_id = str(uuid.uuid4())
 		start_time = time.time()
-		
+
 		try:
 			data = await self.unpack_request_data_async(request)
 			base_reference = TransactionRefGenerator().generate()
@@ -337,24 +337,20 @@ class PesaWayWalletInterface(View):
 						"Amount must be greater than zero",
 						status=400
 					)
-				
 				charge = calculate_fair_tiered_charge(base_amount)
 				total_amount = base_amount + charge
-			
 			except (ValueError, TypeError):
 				return self.create_error_response(
 					ErrorCodes.VALIDATION_ERROR,
 					"Invalid amount format",
 					status=400
 				)
-			
 			logger.info("B2C transfer initiated",
-			            request_id=request_id,
-			            reference=reference,
-			            base_amount=base_amount,
-			            charge=charge,
-			            total_amount=total_amount)
-			
+						extra=dict(request_id=request_id,
+								   reference=reference,
+								   base_amount=base_amount,
+								   charge=charge,
+								   total_amount=total_amount))
 			client_pool = await self.get_client_pool()
 			client = client_pool.get_client()
 			response = await client.send_b2c_payment(
@@ -364,27 +360,22 @@ class PesaWayWalletInterface(View):
 				reason=f"Withdrawal from contribution on {timezone.now()}",
 				results_url=settings.PESAWAY_B2C_CALLBACK
 			)
-			logger.info("B2C transfer API response print %s" % response)
-			if not response.success or response.data.get('code') != ErrorCodes.SUCCESS:
+			logger.info("B2C transfer API response: %s", response)
+			if not response.success or (response.data and response.data.get('code') != ErrorCodes.SUCCESS):
 				logger.error("B2C API call failed",
-				             request_id=request_id,
-				             api_response=response.data)
+							 extra=dict(request_id=request_id,
+										api_response=response.data))
 				return self.create_error_response(
 					ErrorCodes.TRANSACTION_FAILED,
 					"Transaction could not be initiated"
 				)
-			payment_data = {
-				**data,
-				'ref': reference,
-				'charge': charge
-			}
+			payment_data = {**data, 'ref': reference, 'charge': charge}
+			logger.info("Payment data is %s " % payment_data)
 			payment = await sync_to_async(InitiatePayment().post)(
 				contribution_id=data.get('contribution'), **payment_data
 			)
-			
 			logger.info("B2C transfer processing completed",
-			            request_id=request_id,
-			            reference=reference)
+						extra=dict(request_id=request_id, reference=reference))
 			return self.create_success_response({
 				"transaction_reference": reference,
 				"amount": base_amount,
@@ -393,9 +384,10 @@ class PesaWayWalletInterface(View):
 				"status": "PENDING",
 				**payment
 			})
+
 		except Exception as e:
 			logger.exception("B2C transfer failed",
-			                 request_id=request_id, error=str(e))
+							 extra=dict(request_id=request_id, error=str(e)))
 			return self.create_error_response(
 				ErrorCodes.INTERNAL_ERROR,
 				"B2C transfer processing failed"
@@ -403,10 +395,10 @@ class PesaWayWalletInterface(View):
 		finally:
 			duration = time.time() - start_time
 			logger.info("B2C transfer request completed",
-			            request_id=request_id, duration=duration)
-	
+						extra=dict(request_id=request_id, duration=duration))
+
 	@method_decorator(csrf_exempt)
-	@method_decorator(require_http_methods(["POST"]))
+	# @method_decorator(require_http_methods(["POST"]))
 	@async_view
 	async def b2c_transfer_callback_url(self, request):
 		"""B2C callback handler with enhanced processing"""
@@ -474,6 +466,7 @@ class PesaWayWalletInterface(View):
 		
 		try:
 			data = await self.unpack_request_data_async(request)
+			print(data)
 			base_reference = TransactionRefGenerator().generate()
 			reference = f"{base_reference}{int(time.time())}"
 			base_amount = float(data.get('amount'))
@@ -527,7 +520,7 @@ class PesaWayWalletInterface(View):
 			            request_id=request_id, duration=duration)
 	
 	@method_decorator(csrf_exempt)
-	@method_decorator(require_http_methods(["POST"]))
+	# @method_decorator(require_http_methods(["POST"]))
 	@async_view
 	async def c2b_payment_callback_endpoint(self, request):
 		"""C2B callback handler"""
