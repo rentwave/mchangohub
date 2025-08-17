@@ -12,6 +12,14 @@ from mchangohub import settings
 logger = logging.getLogger(__name__)
 
 
+class ErrorCodes:
+    SUCCESS = "200.001"
+    TRANSACTION_FAILED = "403.033"
+    VALIDATION_ERROR = "400.001"
+    RATE_LIMIT_EXCEEDED = "429.001"
+    INTERNAL_ERROR = "999.999.999"
+
+
 
 @shared_task
 def check_transaction_status():
@@ -31,7 +39,10 @@ def check_transaction_status():
             "payment": ApprovePaymentTransaction(),
         }
         processed_count = 0
-        time_threshold = timezone.now() - timedelta(minutes=2)  # Nairobi-aware timestamp
+        time_threshold = timezone.now() - timedelta(hours=24)  # Nairobi-aware timestamp
+        print(
+            f"Checking transactions since {time_threshold} (Nairobi time)"
+        )
         for trx_type, processor in transaction_processors.items():
             print(trx_type, processor)
             pending_transactions = WalletTransactionService().filter(
@@ -39,21 +50,17 @@ def check_transaction_status():
                 transaction_type=trx_type,
                 date_created__gte=time_threshold
             )
-
             for trx in pending_transactions:
                 print(trx)
                 try:
                     response = client.query_mobile_money_transaction(
                         transaction_reference=trx.receipt_number
                     ) or {}
-
-                    result_code = response.get("ResultCode")
-                    if result_code != 0:
+                    if not response.success or response.data.get('code') != ErrorCodes.SUCCESS:
                         logger.info(f"Skipping {trx_type} {trx.id}, not successful → {response}")
                         continue
-                    reference = response.get("OriginatorReference")
-                    receipt = response.get("TransactionID")
-
+                    reference = response.data.get("OriginatorReference")
+                    receipt = response.data.get("TransactionID")
                     if not reference or not receipt:
                         logger.warning(
                             f"{trx_type.capitalize()} {trx.id} missing reference/receipt in response → {response}"
