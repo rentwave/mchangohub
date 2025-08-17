@@ -575,10 +575,24 @@ class PledgeAdmin(admin.ModelAdmin):
     status_display.admin_order_field = 'status__name'
 
     def balance_display(self, obj):
-        balance = obj.balance()
-        color = "green" if balance <= Decimal("0") else "orange" if balance < obj.amount * Decimal("0.5") else "red"
-        formatted = f"KES {balance:,.2f}"
-        return format_html('<span style="color: {}; font-weight: bold;">{}</span>', color, formatted)
+        balance = obj.balance  # ✅ Decimal field
+        amount = obj.amount
+
+        if balance <= 0:
+            color = "green"
+        elif balance < amount * Decimal("0.5"):
+            color = "orange"
+        else:
+            color = "red"
+
+        formatted_balance = f"KES {float(balance):,.2f}"
+
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            color,
+            formatted_balance
+        )
+
     balance_display.short_description = "Balance"
 
     def balance_display_detailed(self, obj):
@@ -594,18 +608,22 @@ class PledgeAdmin(admin.ModelAdmin):
 
     def progress_bar(self, obj):
         amount = obj.amount
-        balance = obj.balance() if callable(obj.balance) else obj.balance  # handle method or field
+        balance = obj.balance  # ✅ Decimal field
         paid = amount - balance
         percent = (paid / amount * 100) if amount > 0 else 0
-        percent_str = f"{percent:.2f}"
+
+        # Format percent before inserting into HTML
+        percent_str = f"{percent:.1f}%"
+
         return format_html(
             '<div style="width:100px; border:1px solid #ccc; background:#eee;">'
             '  <div style="width:{}%; background-color:#4CAF50; height:12px;"></div>'
             '</div>'
-            '<span style="font-size:11px; margin-left:4px;">{}%</span>',
-            percent_str,
-            percent_str
+            '<span style="font-size:11px; margin-left:4px;">{}</span>',
+            percent,  # for width
+            percent_str  # for label
         )
+
     progress_bar.short_description = "Progress"
 
     def progress_percentage(self, obj):
