@@ -39,7 +39,7 @@ def check_transaction_status():
             "payment": ApprovePaymentTransaction(),
         }
         processed_count = 0
-        time_threshold = timezone.now() - timedelta(hours=24)  # Nairobi-aware timestamp
+        time_threshold = timezone.now() - timedelta(minutes=1)  # Nairobi-aware timestamp
         print(
             f"Checking transactions since {time_threshold} (Nairobi time)"
         )
@@ -48,7 +48,7 @@ def check_transaction_status():
             pending_transactions = WalletTransactionService().filter(
                 status__name="Pending",
                 transaction_type=trx_type,
-                date_created__gte=time_threshold
+                date_created__lte=time_threshold
             )
             for trx in pending_transactions:
                 print(trx)
