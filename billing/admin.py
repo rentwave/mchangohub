@@ -452,8 +452,6 @@ class PledgeLogInline(admin.TabularInline):
     fields = ('amount', 'balance', 'note', 'logged_by', 'date_created')
     readonly_fields = ('balance', 'date_created')
 
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('logged_by')
 
 
 @admin.register(PledgeLog)
@@ -464,8 +462,7 @@ class PledgeLogAdmin(admin.ModelAdmin):
     ]
     list_filter = ['date_created', 'logged_by', 'pledge__status']
     search_fields = [
-        'pledge__pledger_name', 'note', 'logged_by__username',
-        'logged_by__first_name', 'logged_by__last_name'
+        'pledge__pledger_name', 'note',
     ]
     readonly_fields = ['balance', 'date_created', 'date_modified']
     # raw_id_fields = ['pledge']
