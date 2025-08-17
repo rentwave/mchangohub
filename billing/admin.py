@@ -465,7 +465,6 @@ class PledgeLogAdmin(admin.ModelAdmin):
         'pledge__pledger_name', 'note',
     ]
     readonly_fields = ['balance', 'date_created', 'date_modified']
-    # raw_id_fields = ['pledge']
     date_hierarchy = 'date_created'
 
     fieldsets = (
@@ -492,16 +491,22 @@ class PledgeLogAdmin(admin.ModelAdmin):
     amount_display.admin_order_field = 'amount'
 
     def balance_display(self, obj):
-        # Ensure balance is a Decimal
         balance = Decimal(obj.balance) if not isinstance(obj.balance, Decimal) else obj.balance
+        amount = Decimal(obj.pledge.amount) if not isinstance(obj.pledge.amount, Decimal) else obj.pledge.amount
 
-        color = "green" if balance <= Decimal(0) else "orange" if balance < obj.pledge.amount * Decimal(
-            "0.5") else "red"
+        if balance <= 0:
+            color = "green"
+        elif balance < amount * Decimal("0.5"):
+            color = "orange"
+        else:
+            color = "red"
+
         formatted_balance = f"KES {balance:,.2f}"
 
         return format_html(
             '<span style="color: {}; font-weight: bold;">{}</span>',
-            color, formatted_balance
+            color,
+            formatted_balance
         )
 
     balance_display.short_description = "Remaining Balance"
@@ -575,7 +580,7 @@ class PledgeAdmin(admin.ModelAdmin):
     status_display.admin_order_field = 'status__name'
 
     def balance_display(self, obj):
-        balance = obj.balance  # ✅ Decimal field
+        balance = obj.balance
         amount = obj.amount
 
         if balance <= 0:
@@ -596,23 +601,23 @@ class PledgeAdmin(admin.ModelAdmin):
     balance_display.short_description = "Balance"
 
     def balance_display_detailed(self, obj):
-        balance = obj.balance()
-        total_paid = obj.total_paid()
+        balance = obj.balance
+        total_paid = obj.total_paid
         percentage = (total_paid / obj.amount * 100) if obj.amount > 0 else 0
         return format_html(
             '<div><strong>Remaining:</strong> KES {:,.2f}<br>'
             '<strong>Paid:</strong> KES {:,.2f} ({:.1f}%)</div>',
             balance, total_paid, percentage
         )
+
     balance_display_detailed.short_description = "Payment Details"
 
     def progress_bar(self, obj):
         amount = obj.amount
-        balance = obj.balance  # ✅ Decimal field
+        balance = obj.balance
         paid = amount - balance
         percent = (paid / amount * 100) if amount > 0 else 0
 
-        # Format percent before inserting into HTML
         percent_str = f"{percent:.1f}%"
 
         return format_html(
@@ -627,14 +632,17 @@ class PledgeAdmin(admin.ModelAdmin):
     progress_bar.short_description = "Progress"
 
     def progress_percentage(self, obj):
-        total_paid = obj.total_paid()
+        total_paid = obj.total_paid
         percentage = (total_paid / obj.amount * 100) if obj.amount > 0 else 0
         return f"{percentage:.1f}%"
     progress_percentage.short_description = "Payment Progress"
 
     def total_paid_display(self, obj):
-        return f"{obj.total_paid():,.2f}"
+        total_paid = obj.total_paid
+        return f"KES {total_paid:,.2f}"
+
     total_paid_display.short_description = "Total Paid"
+    total_paid_display.admin_order_field = "total_paid"
 
     def logs_summary(self, obj):
         logs_count = obj.logs.count()
@@ -649,7 +657,6 @@ class PledgeAdmin(admin.ModelAdmin):
         )
     logs_summary.short_description = "Payment History"
 
-    # --- Custom Actions ---
     @admin.action(description='Mark selected pledges as cleared')
     def mark_as_cleared(self, request, queryset):
         try:

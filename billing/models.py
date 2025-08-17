@@ -808,7 +808,7 @@ class Pledge(BaseModel):
         log = PledgeLog.objects.create(
             pledge=self,
             amount=amount,
-            balance=self.balance - amount,  # balance *after* this payment
+            balance=self.balance - amount,
             note=note,
             logged_by=user,
         )
