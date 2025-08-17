@@ -421,7 +421,7 @@ class WalletAccount(BaseModel):
         return transaction_obj
 
     @transaction.atomic
-    def initiate_payment(self, amount, reference, charge, receipt, description="Payment - Pending"):
+    def initiate_payment(self, amount, reference, charge, receipt, amount_plus_charge, description="Payment - Pending"):
         """
         Step 3: Payment - Move money from available to reserved.
         Creates new transaction with status 'pending'
@@ -450,6 +450,7 @@ class WalletAccount(BaseModel):
             balance_after=account.current,
             reference=reference,
             description=description,
+            amount_plus_charge=amount_plus_charge,
             charge=charge,
             receipt_number=receipt,
             status=state,
