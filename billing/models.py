@@ -220,7 +220,7 @@ class WalletAccount(BaseModel):
 		WorkflowActionLog.objects.bulk_create(workflow_actions)
 	
 	@transaction.atomic
-	def initiate_topup(self, amount, reference, charge , description="TopUp - Pending"):
+	def initiate_topup(self, amount, reference, charge , receipt, description="TopUp - Pending"):
 		"""
 		Step 1: TopUp - Add money to current and uncleared (pending approval).
 		Creates new transaction with status 'pending'
@@ -245,6 +245,7 @@ class WalletAccount(BaseModel):
 			balance_before=old_current,
 			balance_after=account.current,
 			reference=reference,
+			receipt=receipt,
 			charge=charge,
 			description=description,
 			status=state,
@@ -417,7 +418,7 @@ class WalletAccount(BaseModel):
 		return transaction_obj
 	
 	@transaction.atomic
-	def initiate_payment(self, amount, reference, charge, description="Payment - Pending"):
+	def initiate_payment(self, amount, reference, charge, receipt, description="Payment - Pending"):
 		"""
 		Step 3: Payment - Move money from available to reserved.
 		Creates new transaction with status 'pending'
@@ -447,6 +448,7 @@ class WalletAccount(BaseModel):
 			reference=reference,
 			description=description,
 			charge=charge,
+			receipt=receipt,
 			status=state,
 			metadata={
 				'workflow_step': 'initiate_payment',

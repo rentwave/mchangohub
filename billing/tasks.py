@@ -55,7 +55,7 @@ def check_transaction_status():
                 try:
                     response = client.query_mobile_money_transaction(
                         transaction_reference=trx.receipt_number
-                    ) or {}
+                    )
                     if not response.success or response.data.get('code') != ErrorCodes.SUCCESS:
                         logger.info(f"Skipping {trx_type} {trx.id}, not successful → {response}")
                         continue

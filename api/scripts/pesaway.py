@@ -45,11 +45,11 @@
 #     client_secret = "S9zRS9Q3f7DBkC7I"
 #     pesaway = PesaWayAPI(client_id=client_id, client_secret=client_secret)
 #
-#     try:
-#         balance = pesaway.request('/api/v1/account-balance/', method='GET')
-#         print("✅ Account Balance:", balance)
-#     except Exception as e:
-#         print("❌ Balance Check Failed:", e)
+#     # try:
+#     #     balance = pesaway.request('/api/v1/account-balance/', method='GET')
+#     #     print("✅ Account Balance:", balance)
+#     # except Exception as e:
+#     #     print("❌ Balance Check Failed:", e)
 #
 #     # try:
 #     #     mobile_payload = {
@@ -79,7 +79,7 @@
 #     #
 #     # try:
 #     #     b2c_payload = {
-#     #         "ExternalReference": "VAHBDHJSJHBAJFHBDSJHJBSHJDBH",
+#     #         "ExternalReference": "VAHBtyrDHJSJHBAJFHBDSJHJBSHJDBH",
 #     #         "Amount": 30,
 #     #         "PhoneNumber": "254710000008",
 #     #         "Channel": "MPESA",
@@ -91,19 +91,19 @@
 #     # except Exception as e:
 #     #     print("❌ B2C Transfer Failed:", e)
 #
-#     # try:
-#     #     c2b_payload = {
-#     #         "ExternalReference": "65748394",
-#     #         "Amount": 30,
-#     #         "PhoneNumber": "254710956633",
-#     #         "Channel": "MPESA",
-#     #         "Reason": "Payment of transportation fee",
-#     #         "ResultsUrl": "https://yourdomain.com/result_url"
-#     #     }
-#     #     response = pesaway.request('/api/v1/mobile-money/receive-payment/', payload=c2b_payload)
-#     #     print("✅ C2B Payment Response:", response)
-#     # except Exception as e:
-#     #     print("❌ C2B Transfer Failed:", e)
+#     try:
+#         c2b_payload = {
+#             "ExternalReference": "657TRYE48394",
+#             "Amount": 30,
+#             "PhoneNumber": "254710956633",
+#             "Channel": "MPESA",
+#             "Reason": "Payment of transportation fee",
+#             "ResultsUrl": "https://yourdomain.com/result_url"
+#         }
+#         response = pesaway.request('/api/v1/mobile-money/receive-payment/', payload=c2b_payload)
+#         print("✅ C2B Payment Response:", response)
+#     except Exception as e:
+#         print("❌ C2B Transfer Failed:", e)
 #
 #     # try:
 #     #     auth_payload = {

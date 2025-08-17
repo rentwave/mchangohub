@@ -294,7 +294,7 @@ class PesaWayWalletInterface(View):
             logger.info(f"B2C transfer initiated: {request_id} - {reference} - {total_amount}")
             response = self.client.send_b2c_payment(
                 external_reference=reference,
-                amount=total_amount,
+                amount=base_amount,
                 phone_number=data.get('phone_number'),
                 reason=f"Withdrawal from contribution on {timezone.now()}",
                 results_url=settings.PESAWAY_B2C_CALLBACK
@@ -306,6 +306,9 @@ class PesaWayWalletInterface(View):
                     ErrorCodes.TRANSACTION_FAILED,
                     "Transaction could not be initiated"
                 )
+            receipt = response.data.get('TransactionID')
+            data['receipt'] = receipt
+            data['amount'] = total_amount
             payment_data = {**data, 'ref': reference, 'charge': charge}
             payment = InitiatePayment().post(
                 contribution_id=data.get('contribution'), **payment_data
@@ -404,7 +407,8 @@ class PesaWayWalletInterface(View):
                     ErrorCodes.TRANSACTION_FAILED,
                     "Payment could not be initiated"
                 )
-            topup_data = {**data, 'ref': reference, 'charge': charge}
+            receipt = response.data.get('TransactionID')
+            topup_data = {**data, 'ref': reference, 'charge': charge, 'receipt': receipt}
             topup_result = InitiateTopup().post(
                 contribution_id=data.get('contribution'), **topup_data
             )
