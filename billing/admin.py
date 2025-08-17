@@ -525,13 +525,11 @@ class PledgeAdmin(admin.ModelAdmin):
     list_filter = ['status', 'planned_clear_date', 'raised_by', 'date_created']
     search_fields = [
         'pledger_name', 'pledger_contact', 'purpose',
-        'raised_by__username', 'raised_by__first_name', 'raised_by__last_name'
     ]
     readonly_fields = [
         'total_paid_display', 'balance_display_detailed', 'progress_percentage',
         'date_created', 'date_modified', 'logs_summary'
     ]
-    # raw_id_fields = ['raised_by']
     date_hierarchy = 'date_created'
     actions = [
         'mark_as_cleared', 'mark_as_pending', 'clear_pledges_action',
@@ -561,7 +559,7 @@ class PledgeAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
-            'status', 'raised_by'
+            'status',
         ).prefetch_related('logs')
 
     def amount_display(self, obj):
@@ -664,43 +662,6 @@ class PledgeAdmin(admin.ModelAdmin):
                 pledge.add_payment(amount=remaining_balance, user=request.user, note="Admin bulk clear action")
                 cleared_count += 1
         self.message_user(request, f'Successfully cleared {cleared_count} pledge(s) with remaining balances.', messages.SUCCESS)
-
-    @admin.action(description='Export selected pledges to CSV')
-    def export_selected_pledges(self, request, queryset):
-        import csv
-        from django.http import HttpResponse
-
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="pledges_export.csv"'
-        writer = csv.writer(response)
-        writer.writerow([
-            'Pledger Name', 'Contact', 'Amount', 'Status', 'Balance',
-            'Total Paid', 'Purpose', 'Planned Clear Date', 'Raised By', 'Date Created'
-        ])
-        for pledge in queryset:
-            writer.writerow([
-                pledge.pledger_name,
-                pledge.pledger_contact or '',
-                str(pledge.amount),
-                pledge.status.name,
-                str(pledge.balance()),
-                str(pledge.total_paid()),
-                pledge.purpose or '',
-                pledge.planned_clear_date.strftime('%Y-%m-%d') if pledge.planned_clear_date else '',
-                pledge.raised_by.get_full_name() if pledge.raised_by else '',
-                pledge.date_created.strftime('%Y-%m-%d %H:%M')
-            ])
-        return response
-
-    @admin.action(description='Send reminder emails to pledgers')
-    def send_reminder_emails(self, request, queryset):
-        pending_pledges = queryset.filter(Q(status__name='Pending') | Q(status__name='Partially Paid'))
-        self.message_user(
-            request,
-            f'Reminder emails would be sent to {pending_pledges.count()} pledger(s) '
-            f'(Email functionality needs to be implemented).',
-            messages.INFO
-        )
 
 class PledgeStatusFilter(admin.SimpleListFilter):
     """Custom filter for pledge status with color indicators"""
