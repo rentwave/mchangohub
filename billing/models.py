@@ -781,6 +781,7 @@ class BalanceLogEntry(BaseModel):
 class Pledge(BaseModel):
     pledger_name = models.CharField(max_length=255, help_text="Person/Organization making the pledge")
     pledger_contact = models.CharField(max_length=100, blank=True, null=True, help_text="Phone/email of the pledger")
+    contribution = models.ForeignKey(Contribution, null=True, blank=True, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     purpose = models.TextField(blank=True, null=True, help_text="What is this pledge for?")
     planned_clear_date = models.DateField(blank=True, null=True, help_text="When the pledger intends to clear the pledge")

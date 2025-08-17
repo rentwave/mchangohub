@@ -14,6 +14,8 @@ from django.views import View
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
+
+from base.backend.service import StateService
 from billing.backend.interfaces.topup import InitiateTopup, ApproveTopupTransaction
 from billing.backend.interfaces.payment import InitiatePayment, ApprovePaymentTransaction
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
@@ -21,6 +23,8 @@ from billing.helpers.generate_unique_ref import TransactionRefGenerator
 import logging
 
 from billing.itergrations.pesaway import PesaWayAPIClient
+from billing.models import Pledge
+from contributions.backend.services import ContributionService
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +129,7 @@ def validate_request_data(required_fields: list):
     return decorator
 
 
-class PesaWayWalletInterface(View):
+class BillingAdmin(View):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.client = PesaWayAPIClient(
@@ -431,6 +435,83 @@ class PesaWayWalletInterface(View):
             logger.info(f"C2B payment completed: {request_id} - {duration}s")
 
     @method_decorator(csrf_exempt)
+    @method_decorator(require_http_methods(["POST"]))
+    @rate_limit(150)
+    @validate_request_data(['pledger_contact', 'pledger_name', 'amount', 'planned_clear_date', 'contribution'])
+    def create_pledge(self, request):
+        """Endpoint: Create a pledge (Customer to Business)."""
+        request_id = str(uuid.uuid4())
+        start_time = time.time()
+        try:
+            data = self.unpack_request_data(request)
+            logger.debug(f"Incoming pledge request {request_id}: {data}")
+            try:
+                amount = float(data.get('amount'))
+                if amount <= 0:
+                    return self.create_error_response(
+                        ErrorCodes.VALIDATION_ERROR,
+                        "Amount must be greater than zero",
+                        status=400
+                    )
+            except (TypeError, ValueError):
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Invalid amount provided",
+                    status=400
+                )
+            pledger_name = data.get('pledger_name') or 'Anonymous'
+            pledger_contact = data.get('pledger_contact') or 'Anonymous'
+            purpose = data.get('purpose') or 'No purpose specified'
+            contribution = ContributionService().get(id=data.get('contribution'))
+            if not contribution:
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Contribution not found",
+                    status=404
+                )
+            planned_clear_date = data.get('planned_clear_date')
+            if planned_clear_date:
+                try:
+                    planned_clear_date = timezone.datetime.fromisoformat(planned_clear_date)
+                except ValueError:
+                    return self.create_error_response(
+                        ErrorCodes.VALIDATION_ERROR,
+                        "Invalid date format. Use ISO format (YYYY-MM-DD)",
+                        status=400
+                    )
+            else:
+                planned_clear_date = timezone.now() + timezone.timedelta(days=30)
+            status = StateService().get(name="Pending")
+            pledge = Pledge.objects.create(
+                pledger_name=pledger_name,
+                pledger_contact=pledger_contact,
+                amount=amount,
+                purpose=purpose,
+                planned_clear_date=planned_clear_date,
+                contribution=contribution,
+                status=status
+            )
+
+            logger.info(f"Pledge created successfully: {pledge.id} ({request_id})")
+            return self.create_success_response({
+                "status": "PENDING",
+                "message": "Pledge created successfully",
+                "pledge_id": str(pledge.id),
+                "amount": f"{amount:,.2f}"
+            })
+
+        except Exception as e:
+            logger.exception(f"Pledge creation failed: {request_id} - {str(e)}")
+            return self.create_error_response(
+                ErrorCodes.INTERNAL_ERROR,
+                "Pledge processing failed",
+                status=500
+            )
+        finally:
+            duration = round(time.time() - start_time, 3)
+            logger.info(f"Pledge request completed: {request_id} in {duration}s")
+            
+    @method_decorator(csrf_exempt)
     def c2b_payment_callback_endpoint(self, request):
         """C2B callback handler"""
         request_id = str(uuid.uuid4())
@@ -456,7 +537,6 @@ class PesaWayWalletInterface(View):
                     ErrorCodes.TRANSACTION_FAILED,
                     "Transaction failed"
                 )
-
         except Exception as e:
             logger.exception(f"C2B callback failed: {request_id} - {str(e)}")
             return self.create_error_response(
@@ -491,7 +571,7 @@ class PesaWayWalletInterface(View):
             )
 
 
-pesaway_interface = PesaWayWalletInterface()
+billing_admin = BillingAdmin()
 
 
 @csrf_exempt
@@ -518,14 +598,18 @@ def ready_check(request):
 from django.urls import path, include
 
 api_v1_patterns = [
-    path('wallet/balance/', pesaway_interface.wallet_balance, name='wallet_balance'),
-    path('wallet/mobile-money-transfer/', pesaway_interface.mobile_money_transfer, name='mobile_money_transfer'),
-    path('wallet/b2c-transfer/', pesaway_interface.b2c_transfer, name='b2c_transfer'),
-    path('wallet/c2b-payment/', pesaway_interface.c2b_payment, name='c2b_payment'),
-    path('wallet/query-mobile-money-transaction/', pesaway_interface.query_mobile_money_transaction,
+    # Pledge Endpoints
+    path('pledge/create/', billing_admin.create_pledge, name='create_pledge'),
+    # Billing Admin Endpoints
+    path('wallet/balance/', billing_admin.wallet_balance, name='wallet_balance'),
+    path('wallet/mobile-money-transfer/', billing_admin.mobile_money_transfer, name='mobile_money_transfer'),
+    path('wallet/b2c-transfer/', billing_admin.b2c_transfer, name='b2c_transfer'),
+    path('wallet/c2b-payment/', billing_admin.c2b_payment, name='c2b_payment'),
+    path('wallet/query-mobile-money-transaction/', billing_admin.query_mobile_money_transaction,
          name='query_transaction'),
-    path('callbacks/b2c/', pesaway_interface.b2c_transfer_callback_url, name='b2c_callback'),
-    path('callbacks/c2b/', pesaway_interface.c2b_payment_callback_endpoint, name='c2b_callback'),
+    # Callbacks
+    path('callbacks/b2c/', billing_admin.b2c_transfer_callback_url, name='b2c_callback'),
+    path('callbacks/c2b/', billing_admin.c2b_payment_callback_endpoint, name='c2b_callback'),
 ]
 
 urlpatterns = [

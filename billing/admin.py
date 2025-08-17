@@ -539,7 +539,7 @@ class PledgeAdmin(admin.ModelAdmin):
             'fields': ('pledger_name', 'pledger_contact', 'raised_by')
         }),
         ('Pledge Details', {
-            'fields': ('amount', 'purpose', 'planned_clear_date', 'status')
+            'fields': ('contribution', 'amount', 'purpose', 'planned_clear_date', 'status')
         }),
         ('Payment Summary', {
             'fields': (
