@@ -513,7 +513,7 @@ class BillingAdmin(View):
     @method_decorator(csrf_exempt)
     @method_decorator(require_http_methods(["POST"]))
     @rate_limit(150)
-    @validate_request_data(['pledger_contact', 'pledger_name', 'amount', 'planned_clear_date', 'contribution', 'pledge', 'phone_number'])
+    @validate_request_data(['pledge', 'amount'])
     def clear_pledge(self, request):
         """Endpoint: Clear an existing pledge (Customer to Business)."""
         request_id = str(uuid.uuid4())
