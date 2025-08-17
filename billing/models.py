@@ -222,7 +222,7 @@ class WalletAccount(BaseModel):
         WorkflowActionLog.objects.bulk_create(workflow_actions)
 
     @transaction.atomic
-    def initiate_topup(self, amount, reference, charge , receipt, description="TopUp - Pending"):
+    def initiate_topup(self, amount, reference, charge , receipt, amount_plus_charge, description="TopUp - Pending"):
         """
         Step 1: TopUp - Add money to current and uncleared (pending approval).
         Creates new transaction with status 'pending'
@@ -248,6 +248,7 @@ class WalletAccount(BaseModel):
             balance_after=account.current,
             reference=reference,
             receipt_number=receipt,
+            amount_plus_charge=amount_plus_charge,
             charge=charge,
             description=description,
             status=state,
@@ -713,6 +714,7 @@ class WalletTransaction(BaseModel):
     wallet_account = models.ForeignKey(WalletAccount, on_delete=models.CASCADE, related_name='transactions', db_index=True)
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, db_index=True)
     amount = models.DecimalField(max_digits=18, decimal_places=2)
+    amount_plus_charge = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal())
     balance_before = models.DecimalField(max_digits=18, decimal_places=2)
     balance_after = models.DecimalField(max_digits=18, decimal_places=2)
     charge = models.DecimalField(max_digits=18, decimal_places=2, db_index=True, null=True, blank=True)

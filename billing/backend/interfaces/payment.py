@@ -118,7 +118,7 @@ class InitiatePayment(InterfaceBase):
             log.exception("Error checking account existence for contribution %s: %s", contribution.id, e)
             return False
     
-    def _process_transaction(self, contribution, amount: Decimal, phone_number: str, ref: str, charge, receipt) -> Dict[str, Any]:
+    def _process_transaction(self, contribution, amount: Decimal, phone_number: str, ref: str, charge, receipt, amount_plus_charge) -> Dict[str, Any]:
         transaction_history = None
         try:
             with transaction.atomic():
@@ -137,6 +137,7 @@ class InitiatePayment(InterfaceBase):
                         amount=amount,
                         reference=ref,
                         description=description,
+                        amount_plus_charge=amount_plus_charge,
                         charge=charge,
                         receipt=receipt
                     )
@@ -203,9 +204,10 @@ class InitiatePayment(InterfaceBase):
             if not self._check_account_exists(contribution):
                 return self.ERROR_CODES['ACCOUNT_NOT_EXISTS']
             amount = Decimal(str(kwargs["amount"]))
+            amount_plus_charge = Decimal(str(kwargs["amount_plus_charge"]))
             phone_number = kwargs["phone_number"].strip()
             receipt = kwargs['receipt']
-            return self._process_transaction(contribution, amount, phone_number, kwargs['ref'], kwargs['charge'], receipt)
+            return self._process_transaction(contribution, amount, phone_number, kwargs['ref'], kwargs['charge'], receipt, amount_plus_charge)
         except Exception as e:
             log.exception(
                 "Initiatepayment.post exception for contribution %s: %s",

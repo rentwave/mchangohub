@@ -147,12 +147,12 @@ class WalletTransactionAdmin(admin.ModelAdmin, DashboardDataMixin):
     """Admin for wallet transactions."""
     list_display = [
         'wallet_account_display', 'transaction_type', 'amount_display',
-        'status_display', 'reference', 'charge', 'balance_before', 'balance_after', 'workflow_actions_count', 'date_created'
+        'status_display', 'reference', 'amount_plus_charge' ,'charge', 'balance_before', 'balance_after', 'workflow_actions_count', 'date_created'
     ]
     list_filter = ['transaction_type', 'status', 'date_created']
     search_fields = ['wallet_account__account_number', 'reference', 'description']
     readonly_fields = [
-        'wallet_account', 'transaction_type', 'amount', 'balance_before', 'charge',
+        'wallet_account', 'transaction_type', 'amount', 'balance_before', 'charge', 'amount_plus_charge',
         'balance_after', 'reference', 'description', 'status', 'metadata'
     ]
     inlines = [WorkflowActionLogInline]

@@ -120,7 +120,7 @@ class InitiateTopup(InterfaceBase):
             logger.exception("Error checking account existence for contribution %s: %s", contribution.id, e)
             return False
     
-    def _process_transaction(self, contribution, amount: Decimal, phone_number: str, ref: str, charge, receipt) -> Dict[str, Any]:
+    def _process_transaction(self, contribution, amount: Decimal, phone_number: str, ref: str, charge, receipt, amount_plus_charge) -> Dict[str, Any]:
         transaction_history = None
         try:
             with transaction.atomic():
@@ -143,6 +143,7 @@ class InitiateTopup(InterfaceBase):
                         charge=charge,
                         receipt=receipt,
                         description=description,
+                        amount_plus_charge=amount_plus_charge
                     )
                     if not transaction_history:
                         return self.ERROR_CODES['TRANSACTION_CREATION_FAILED']
@@ -205,11 +206,12 @@ class InitiateTopup(InterfaceBase):
             if not self._check_account_exists(contribution):
                 return self.ERROR_CODES['ACCOUNT_NOT_EXISTS']
             amount = Decimal(str(kwargs["amount"]))
+            amount_plus_charge = Decimal(str(kwargs["amount_plus_charge"]))
             phone_number = kwargs["phone_number"].strip()
             ref = kwargs["ref"].strip()
             charge = kwargs["charge"]
             receipt= kwargs.get("receipt", "")
-            return self._process_transaction(contribution, amount, phone_number, ref, charge, receipt)
+            return self._process_transaction(contribution, amount, phone_number, ref, charge, receipt, amount_plus_charge)
         except Exception as e:
             logger.exception(
                 "InitiateTopup.post exception for contribution %s: %s",

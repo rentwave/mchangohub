@@ -312,7 +312,8 @@ class BillingAdmin(View):
                 )
             receipt = response.data.get('TransactionID')
             data['receipt'] = receipt
-            data['amount'] = total_amount
+            data['amount'] = base_amount
+            data['amount_plus_charge'] = total_amount
             payment_data = {**data, 'ref': reference, 'charge': charge}
             payment = InitiatePayment().post(
                 contribution_id=data.get('contribution'), **payment_data
@@ -412,7 +413,7 @@ class BillingAdmin(View):
                     "Payment could not be initiated"
                 )
             receipt = response.data.get('TransactionID')
-            topup_data = {**data, 'ref': reference, 'charge': charge, 'receipt': receipt}
+            topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt}
             topup_result = InitiateTopup().post(
                 contribution_id=data.get('contribution'), **topup_data
             )
