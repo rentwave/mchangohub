@@ -1,0 +1,106 @@
+me/138.0.0.0 Safari/537.36"
+
+172.23.0.1 - - [17/Aug/2025:14:27:22 +0300] "GET /console/jsi18n/ HTTP/1.1" 200 3342 "https://zentu.rentwaveafrica.co.ke/console/billing/wallettransaction/?status__id__exact=6bbbf65e-4679-4def-a75c-99c22b2d9d0c" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+
+Contribution object (845aa73d-72a1-473e-b278-9af7779b48ca)
+
+Contribution object (845aa73d-72a1-473e-b278-9af7779b48ca)
+
+InitiatePayment create_transaction_history Exception: WalletTransaction() got unexpected keyword arguments: 'receipt'
+
+Traceback (most recent call last):
+
+  File "/usr/src/app/billing/backend/interfaces/base.py", line 207, in initiate_transaction
+
+    transaction_history = account.initiate_payment(amount=amount, reference=reference, description=description, charge=charge, receipt=receipt)
+
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/contextlib.py", line 81, in inner
+
+    return func(*args, **kwds)
+
+           ^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/src/app/billing/models.py", line 442, in initiate_payment
+
+    transaction_obj = WalletTransaction.objects.create(
+
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
+
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 661, in create
+
+    obj = self.model(**kwargs)
+
+          ^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/base.py", line 569, in __init__
+
+    raise TypeError(
+
+TypeError: WalletTransaction() got unexpected keyword arguments: 'receipt'
+
+Failed to initiate transaction: InitiatePayment Could not create Transaction History. Server Error.
+
+Traceback (most recent call last):
+
+  File "/usr/src/app/billing/backend/interfaces/base.py", line 207, in initiate_transaction
+
+    transaction_history = account.initiate_payment(amount=amount, reference=reference, description=description, charge=charge, receipt=receipt)
+
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/contextlib.py", line 81, in inner
+
+    return func(*args, **kwds)
+
+           ^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/src/app/billing/models.py", line 442, in initiate_payment
+
+    transaction_obj = WalletTransaction.objects.create(
+
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
+
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 661, in create
+
+    obj = self.model(**kwargs)
+
+          ^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/base.py", line 569, in __init__
+
+    raise TypeError(
+
+TypeError: WalletTransaction() got unexpected keyword arguments: 'receipt'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+
+  File "/usr/src/app/billing/backend/interfaces/payment.py", line 134, in _process_transaction
+
+    transaction_history = self.initiate_transaction(
+
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/usr/src/app/billing/backend/interfaces/base.py", line 215, in initiate_transaction
+
+    raise Exception('%s Could not create Transaction History. Server Error.' % self.__class__.__name__)
+
+Exception: InitiatePayment Could not create Transaction History. Server Error.
+
+172.23.0.1 - - [17/Aug/2025:14:27:31 +0300] "POST /billing/api/v1/wallet/b2c-transfer/ HTTP/1.1" 200 319 "-" "PostmanRuntime/7.45.0"
+

@@ -245,7 +245,7 @@ class WalletAccount(BaseModel):
 			balance_before=old_current,
 			balance_after=account.current,
 			reference=reference,
-			receipt=receipt,
+			receipt_number=receipt,
 			charge=charge,
 			description=description,
 			status=state,
@@ -448,7 +448,7 @@ class WalletAccount(BaseModel):
 			reference=reference,
 			description=description,
 			charge=charge,
-			receipt=receipt,
+			receipt_number=receipt,
 			status=state,
 			metadata={
 				'workflow_step': 'initiate_payment',
