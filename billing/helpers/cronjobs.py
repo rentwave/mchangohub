@@ -102,15 +102,7 @@ class Automate:
                             exc_info=True
                         )
 
-            return APIResponse(
-                success=True,
-                data={"processed": processed_count},
-                status_code=200
-            )
+            return {"success": True, "processed": processed_count}
         except Exception as e:
             logger.exception("Unexpected error while checking transactions")
-            return APIResponse(
-                success=False,
-                error=str(e),
-                status_code=500
-            )
+            return {"success": False, "error": str(e), "status_code": 500}

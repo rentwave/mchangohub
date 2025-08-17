@@ -26,8 +26,8 @@ def check_transaction_status():
     Returns an APIResponse object.
     """
     try:
-        ex = Thread(target=Automate().check_transactions())
-        ex.daemon = True
+        ex = Thread(target=Automate().check_transactions)
+        ex.daemon = False
         ex.start()
     except Exception as e:
         logger.exception("Unexpected error while checking transactions")
