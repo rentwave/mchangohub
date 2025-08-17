@@ -1,9 +1,14 @@
+from decimal import Decimal
+
 from django.contrib import admin
 from django.db.models import Sum, Count, Avg, Q
 from django.utils.html import format_html
 from django.urls import path
 from django.template.response import TemplateResponse
-from .models import WalletAccount, WalletTransaction, WorkflowActionLog
+
+from base.models import State
+from .models import WalletAccount, WalletTransaction, WorkflowActionLog, PledgeLog, Pledge
+
 
 class WorkflowActionLogInline(admin.TabularInline):
     """Inline for viewing workflow actions within transactions."""
@@ -411,3 +416,312 @@ class BalanceLogEntryAdmin(admin.ModelAdmin):
         "date_created",
     )
     ordering = ("-date_created",)
+
+
+
+
+def get_state_color(state_name, default_color="#6c757d"):
+    """Get color for state, with fallbacks for common state names"""
+    color_mapping = {
+        'pending': '#dc3545',  # Red
+        'partially paid': '#ffc107',  # Yellow/Orange
+        'cleared': '#28a745',  # Green
+        'cancelled': '#6c757d',  # Gray
+        'overdue': '#fd7e14',  # Orange
+        'confirmed': '#17a2b8',  # Teal
+        'processing': '#007bff',  # Blue
+        'on hold': '#6f42c1',  # Purple
+    }
+
+    state_key = state_name.lower().strip()
+    if state_key in color_mapping:
+        return color_mapping[state_key]
+
+    for key, color in color_mapping.items():
+        if key in state_key or state_key in key:
+            return color
+
+    return default_color
+
+
+
+class PledgeLogInline(admin.TabularInline):
+    """Inline for viewing pledge logs within pledge admin"""
+    model = PledgeLog
+    extra = 1
+    fields = ('amount', 'balance', 'note', 'logged_by', 'date_created')
+    readonly_fields = ('balance', 'date_created')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('logged_by')
+
+
+@admin.register(PledgeLog)
+class PledgeLogAdmin(admin.ModelAdmin):
+    list_display = [
+        'pledge_display', 'amount_display', 'balance_display',
+        'logged_by', 'date_created', 'note_preview'
+    ]
+    list_filter = ['date_created', 'logged_by', 'pledge__status']
+    search_fields = [
+        'pledge__pledger_name', 'note', 'logged_by__username',
+        'logged_by__first_name', 'logged_by__last_name'
+    ]
+    readonly_fields = ['balance', 'date_created', 'date_modified']
+    # raw_id_fields = ['pledge']
+    date_hierarchy = 'date_created'
+
+    fieldsets = (
+        ('Payment Information', {
+            'fields': ('pledge', 'amount', 'balance')
+        }),
+        ('Details', {
+            'fields': ('note', 'logged_by')
+        }),
+        ('Timestamps', {
+            'fields': ('date_created', 'date_modified'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def pledge_display(self, obj):
+        return f"{obj.pledge.pledger_name} ({obj.pledge.amount:,.2f})"
+    pledge_display.short_description = "Pledge"
+    pledge_display.admin_order_field = 'pledge__pledger_name'
+
+    def amount_display(self, obj):
+        return f"KES {obj.amount:,.2f}"
+    amount_display.short_description = "Payment"
+    amount_display.admin_order_field = 'amount'
+
+    def balance_display(self, obj):
+        # Ensure balance is a Decimal
+        balance = Decimal(obj.balance) if not isinstance(obj.balance, Decimal) else obj.balance
+
+        color = "green" if balance <= Decimal(0) else "orange" if balance < obj.pledge.amount * Decimal(
+            "0.5") else "red"
+        formatted_balance = f"KES {balance:,.2f}"
+
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            color, formatted_balance
+        )
+
+    balance_display.short_description = "Remaining Balance"
+    balance_display.admin_order_field = "balance"
+
+    def note_preview(self, obj):
+        return (obj.note[:50] + '...') if obj.note and len(obj.note) > 50 else (obj.note or "-")
+    note_preview.short_description = "Note"
+
+
+@admin.register(Pledge)
+class PledgeAdmin(admin.ModelAdmin):
+    list_display = [
+        'pledger_name', 'amount_display', 'status_display',
+        'balance_display', 'progress_bar', 'planned_clear_date',
+        'raised_by', 'date_created'
+    ]
+    list_filter = ['status', 'planned_clear_date', 'raised_by', 'date_created']
+    search_fields = [
+        'pledger_name', 'pledger_contact', 'purpose',
+        'raised_by__username', 'raised_by__first_name', 'raised_by__last_name'
+    ]
+    readonly_fields = [
+        'total_paid_display', 'balance_display_detailed', 'progress_percentage',
+        'date_created', 'date_modified', 'logs_summary'
+    ]
+    # raw_id_fields = ['raised_by']
+    date_hierarchy = 'date_created'
+    actions = [
+        'mark_as_cleared', 'mark_as_pending', 'clear_pledges_action',
+        'export_selected_pledges', 'send_reminder_emails'
+    ]
+    inlines = [PledgeLogInline]
+
+    fieldsets = (
+        ('Pledger Information', {
+            'fields': ('pledger_name', 'pledger_contact', 'raised_by')
+        }),
+        ('Pledge Details', {
+            'fields': ('amount', 'purpose', 'planned_clear_date', 'status')
+        }),
+        ('Payment Summary', {
+            'fields': (
+                'total_paid_display', 'balance_display_detailed',
+                'progress_percentage', 'logs_summary'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('date_created', 'date_modified'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'status', 'raised_by'
+        ).prefetch_related('logs')
+
+    def amount_display(self, obj):
+        return f"KES {obj.amount:,.2f}"
+    amount_display.short_description = "Pledge Amount"
+    amount_display.admin_order_field = 'amount'
+
+    def status_display(self, obj):
+        color = getattr(obj.status, 'color', None) or get_state_color(obj.status.name)
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 2px 6px; '
+            'border-radius: 3px; font-weight: bold; font-size: 11px;">{}</span>',
+            color, obj.status.name
+        )
+    status_display.short_description = "Status"
+    status_display.admin_order_field = 'status__name'
+
+    def balance_display(self, obj):
+        balance = obj.balance()
+        color = "green" if balance <= Decimal("0") else "orange" if balance < obj.amount * Decimal("0.5") else "red"
+        formatted = f"KES {balance:,.2f}"
+        return format_html('<span style="color: {}; font-weight: bold;">{}</span>', color, formatted)
+    balance_display.short_description = "Balance"
+
+    def balance_display_detailed(self, obj):
+        balance = obj.balance()
+        total_paid = obj.total_paid()
+        percentage = (total_paid / obj.amount * 100) if obj.amount > 0 else 0
+        return format_html(
+            '<div><strong>Remaining:</strong> KES {:,.2f}<br>'
+            '<strong>Paid:</strong> KES {:,.2f} ({:.1f}%)</div>',
+            balance, total_paid, percentage
+        )
+    balance_display_detailed.short_description = "Payment Details"
+
+    def progress_bar(self, obj):
+        amount = obj.amount
+        balance = obj.balance() if callable(obj.balance) else obj.balance  # handle method or field
+        paid = amount - balance
+        percent = (paid / amount * 100) if amount > 0 else 0
+        percent_str = f"{percent:.2f}"
+        return format_html(
+            '<div style="width:100px; border:1px solid #ccc; background:#eee;">'
+            '  <div style="width:{}%; background-color:#4CAF50; height:12px;"></div>'
+            '</div>'
+            '<span style="font-size:11px; margin-left:4px;">{}%</span>',
+            percent_str,
+            percent_str
+        )
+    progress_bar.short_description = "Progress"
+
+    def progress_percentage(self, obj):
+        total_paid = obj.total_paid()
+        percentage = (total_paid / obj.amount * 100) if obj.amount > 0 else 0
+        return f"{percentage:.1f}%"
+    progress_percentage.short_description = "Payment Progress"
+
+    def total_paid_display(self, obj):
+        return f"{obj.total_paid():,.2f}"
+    total_paid_display.short_description = "Total Paid"
+
+    def logs_summary(self, obj):
+        logs_count = obj.logs.count()
+        if logs_count == 0:
+            return "No payments recorded"
+        last_payment = obj.logs.first()
+        return format_html(
+            '<strong>{}</strong> payment(s)<br>Last: KES {:,.2f} on {}',
+            logs_count,
+            last_payment.amount if last_payment else 0,
+            last_payment.date_created.strftime('%Y-%m-%d') if last_payment else 'N/A'
+        )
+    logs_summary.short_description = "Payment History"
+
+    # --- Custom Actions ---
+    @admin.action(description='Mark selected pledges as cleared')
+    def mark_as_cleared(self, request, queryset):
+        try:
+            cleared_state = State.objects.get(name='Cleared')
+            updated = queryset.update(status=cleared_state)
+            self.message_user(request, f'Successfully marked {updated} pledge(s) as cleared.', messages.SUCCESS)
+        except State.DoesNotExist:
+            self.message_user(request, 'Error: "Cleared" status not found in database.', messages.ERROR)
+
+    @admin.action(description='Mark selected pledges as pending')
+    def mark_as_pending(self, request, queryset):
+        try:
+            pending_state = State.objects.get(name='Pending')
+            updated = queryset.update(status=pending_state)
+            self.message_user(request, f'Successfully marked {updated} pledge(s) as pending.', messages.SUCCESS)
+        except State.DoesNotExist:
+            self.message_user(request, 'Error: "Pending" status not found in database.', messages.ERROR)
+
+    @admin.action(description='Clear selected pledges (add full payment)')
+    def clear_pledges_action(self, request, queryset):
+        cleared_count = 0
+        for pledge in queryset:
+            remaining_balance = pledge.balance()
+            if remaining_balance > 0:
+                pledge.add_payment(amount=remaining_balance, user=request.user, note="Admin bulk clear action")
+                cleared_count += 1
+        self.message_user(request, f'Successfully cleared {cleared_count} pledge(s) with remaining balances.', messages.SUCCESS)
+
+    @admin.action(description='Export selected pledges to CSV')
+    def export_selected_pledges(self, request, queryset):
+        import csv
+        from django.http import HttpResponse
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="pledges_export.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            'Pledger Name', 'Contact', 'Amount', 'Status', 'Balance',
+            'Total Paid', 'Purpose', 'Planned Clear Date', 'Raised By', 'Date Created'
+        ])
+        for pledge in queryset:
+            writer.writerow([
+                pledge.pledger_name,
+                pledge.pledger_contact or '',
+                str(pledge.amount),
+                pledge.status.name,
+                str(pledge.balance()),
+                str(pledge.total_paid()),
+                pledge.purpose or '',
+                pledge.planned_clear_date.strftime('%Y-%m-%d') if pledge.planned_clear_date else '',
+                pledge.raised_by.get_full_name() if pledge.raised_by else '',
+                pledge.date_created.strftime('%Y-%m-%d %H:%M')
+            ])
+        return response
+
+    @admin.action(description='Send reminder emails to pledgers')
+    def send_reminder_emails(self, request, queryset):
+        pending_pledges = queryset.filter(Q(status__name='Pending') | Q(status__name='Partially Paid'))
+        self.message_user(
+            request,
+            f'Reminder emails would be sent to {pending_pledges.count()} pledger(s) '
+            f'(Email functionality needs to be implemented).',
+            messages.INFO
+        )
+
+class PledgeStatusFilter(admin.SimpleListFilter):
+    """Custom filter for pledge status with color indicators"""
+    title = 'Status with Colors'
+    parameter_name = 'status_colored'
+
+    def lookups(self, request, model_admin):
+        states = State.objects.all()
+        choices = []
+        for state in states:
+            if hasattr(state, 'color') and state.color:
+                color = state.color
+            else:
+                color = get_state_color(state.name)
+            label = f"{state.name} ●"
+            choices.append((state.id, label))
+        return choices
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(status__id=self.value())
+        return queryset
+
+
