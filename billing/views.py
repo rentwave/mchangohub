@@ -491,7 +491,6 @@ class BillingAdmin(View):
                 contribution=contribution,
                 status=status
             )
-
             logger.info(f"Pledge created successfully: {pledge.id} ({request_id})")
             return self.create_success_response({
                 "status": "PENDING",
@@ -510,7 +509,67 @@ class BillingAdmin(View):
         finally:
             duration = round(time.time() - start_time, 3)
             logger.info(f"Pledge request completed: {request_id} in {duration}s")
-            
+
+    @method_decorator(csrf_exempt)
+    @method_decorator(require_http_methods(["POST"]))
+    @rate_limit(150)
+    @validate_request_data(['pledger_contact', 'pledger_name', 'amount', 'planned_clear_date', 'contribution', 'pledge', 'phone_number'])
+    def clear_pledge(self, request):
+        """Endpoint: Clear an existing pledge (Customer to Business)."""
+        request_id = str(uuid.uuid4())
+        start_time = time.time()
+        try:
+            data = self.unpack_request_data(request)
+            logger.debug(f"Incoming pledge request {request_id}: {data}")
+            try:
+                pledge = Pledge.objects.get(id=data['pledge'])
+            except Pledge.DoesNotExist:
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Pledge not found",
+                    status=404
+                )
+            reference = f"{TransactionRefGenerator().generate()}{int(time.time())}"
+            base_amount = Decimal(str(data['amount']))
+            charge = Decimal(str(calculate_fair_tiered_charge(float(base_amount))))
+            total_amount = base_amount + charge
+            logger.info(f"C2B payment initiated: {request_id} - {reference} for {total_amount}")
+            response = self.client.receive_c2b_payment(
+                external_reference=reference,
+                amount=float(total_amount),
+                phone_number=data['phone_number'],
+                reason=f"Contribution on {timezone.now()}",
+                results_url=settings.PESAWAY_C2B_CALLBACK,
+            )
+            if not (response.success and response.data.get('code') == ErrorCodes.SUCCESS):
+                return self.create_error_response(
+                    ErrorCodes.TRANSACTION_FAILED,
+                    "Payment could not be initiated"
+                )
+            receipt = response.data.get('TransactionID')
+            topup_result = InitiateTopup().post(
+                contribution_id=pledge.contribution.id,
+                **{**data, 'ref': reference, 'charge': charge, 'receipt': receipt}
+            )
+            pledge.add_payment(base_amount, user=pledge.pledger_name, note="")
+            logger.info(f"Pledge cleared successfully: {pledge.id} ({topup_result})")
+            return self.create_success_response({
+                "status": "PENDING",
+                "message": "Pledge created successfully",
+                "pledge_id": str(pledge.id),
+                "amount": f"{base_amount:,.2f}"
+            })
+        except Exception as e:
+            logger.exception(f"Pledge creation failed: {request_id} - {e}")
+            return self.create_error_response(
+                ErrorCodes.INTERNAL_ERROR,
+                "Pledge processing failed",
+                status=500
+            )
+        finally:
+            duration = round(time.time() - start_time, 3)
+            logger.info(f"Pledge request completed: {request_id} in {duration}s")
+
     @method_decorator(csrf_exempt)
     def c2b_payment_callback_endpoint(self, request):
         """C2B callback handler"""
@@ -600,6 +659,7 @@ from django.urls import path, include
 api_v1_patterns = [
     # Pledge Endpoints
     path('pledge/create/', billing_admin.create_pledge, name='create_pledge'),
+    path('pledge/clear/', billing_admin.clear_pledge, name='clear_pledge'),
     # Billing Admin Endpoints
     path('wallet/balance/', billing_admin.wallet_balance, name='wallet_balance'),
     path('wallet/mobile-money-transfer/', billing_admin.mobile_money_transfer, name='mobile_money_transfer'),

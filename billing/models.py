@@ -791,36 +791,37 @@ class Pledge(BaseModel):
     def __str__(self):
         return f"{self.pledger_name} - {self.amount} ({self.status.name})"
 
-    def total_paid(self):
-        return self.logs.aggregate(total=Sum("amount"))["total"] or 0
+    @property
+    def total_paid(self) -> Decimal:
+        """Total amount paid towards this pledge."""
+        return self.logs.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
 
-    def balance(self):
-        """
-        Current balance (based on latest log if exists, otherwise full pledge amount).
-        """
-        last_log = self.logs.order_by("-date_created").first()
-        if last_log:
-            return last_log.balance
-        return self.amount
+    @property
+    def balance(self) -> Decimal:
+        """Remaining balance on this pledge."""
+        return self.amount - self.total_paid
 
-    def add_payment(self, amount, user=None, note=""):
+    def add_payment(self, amount: Decimal, user=None, note=""):
         """
-        Create a pledge log with automatic balance update and status adjustment.
+        Add a payment (PledgeLog), auto-calculates new balance & updates status.
         """
         log = PledgeLog.objects.create(
             pledge=self,
             amount=amount,
+            balance=self.balance - amount,  # balance *after* this payment
             note=note,
-            logged_by=user
+            logged_by=user,
         )
+        self._update_status()
         return log
 
     def _update_status(self):
         """
-        Updates the pledge status based on payments made.
-        Requires your State table to have: 'Pending', 'Partially Paid', 'Cleared'.
+        Update pledge status based on payments made.
+        Requires `State` table to have: Pending, Partially Paid, Cleared.
         """
-        paid = self.total_paid()
+        paid = self.total_paid
+
         if paid <= 0:
             state_name = "Pending"
         elif paid < self.amount:
@@ -830,7 +831,7 @@ class Pledge(BaseModel):
 
         try:
             new_state = State.objects.get(name=state_name)
-            if self.status != new_state:
+            if self.status_id != new_state.id:
                 self.status = new_state
                 self.save(update_fields=["status", "date_modified"])
         except State.DoesNotExist:
@@ -866,12 +867,10 @@ class PledgeLog(BaseModel):
 
     def save(self, *args, **kwargs):
         """
-        Compute balance at this payment and update pledge status.
+        Ensure balance is set correctly before saving.
         """
-        if not self.pk:  # only for new logs
-            already_paid = self.pledge.total_paid()
+        if not self.pk and not self.balance:
+            already_paid = self.pledge.total_paid
             new_total = already_paid + self.amount
             self.balance = self.pledge.amount - new_total
-
         super().save(*args, **kwargs)
-        self.pledge._update_status()
