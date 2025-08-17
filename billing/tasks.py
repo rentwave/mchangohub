@@ -33,6 +33,7 @@ def check_transaction_status():
         processed_count = 0
         time_threshold = timezone.now() - timedelta(minutes=2)  # Nairobi-aware timestamp
         for trx_type, processor in transaction_processors.items():
+            print(trx_type, processor)
             pending_transactions = WalletTransactionService().filter(
                 status__name="Pending",
                 transaction_type=trx_type,
@@ -40,6 +41,7 @@ def check_transaction_status():
             )
 
             for trx in pending_transactions:
+                print(trx)
                 try:
                     response = client.query_mobile_money_transaction(
                         transaction_reference=trx.receipt_number
