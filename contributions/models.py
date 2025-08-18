@@ -32,6 +32,7 @@ class Contribution(GenericBaseModel):
         WalletTransaction = apps.get_model('billing', 'WalletTransaction')
         return WalletTransaction.objects.filter(
             wallet_account__contribution=self,
+            status__name="Completed",
             transaction_type='topup'
         )
 
