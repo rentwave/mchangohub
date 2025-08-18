@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib import admin
 from django.utils.html import format_html
 from datetime import date, datetime
@@ -54,27 +56,46 @@ class ContributionAdmin(admin.ModelAdmin):
     
     amount_contributed_display.short_description = "Contributed"
     
+    from decimal import Decimal
+    from django.utils.html import format_html
+    
+    from decimal import Decimal
+    from django.utils.html import format_html
+    
     def progress_balance(self, obj):
-        """Progress bar for balance."""
-        target = obj.target_amount or 0
-        contributed = obj.total_contributed or 0
-        balance = max(target - contributed, 0)
-        percentage = (contributed / target * 100) if target else 0
+        """Progress bar for balance with dynamic background."""
+        target = obj.target_amount or Decimal("0")
+        contributed = obj.total_contributed or Decimal("0")
+        balance = max(target - contributed, Decimal("0"))
+        percentage = (contributed / target * 100) if target > 0 else Decimal("0")
+        if balance <= 0:
+            bar_color = "#16a34a"
+        elif balance < target * Decimal("0.5"):
+            bar_color = "#f59e0b"
+        else:
+            bar_color = "#dc2626"
+        if percentage >= 75:
+            bg_color = "#fef2f2"
+        elif percentage >= 50:
+            bg_color = "#fffbeb"
+        elif percentage >= 25:
+            bg_color = "#ecfdf5"
+        else:
+            bg_color = "#f3f4f6"
         
         percentage_str = f"{percentage:.0f}"
         
         return format_html(
             """
-            <div style="width:120px; background:#eee; border-radius:5px; overflow:hidden;">
-                <div style="width:{}%; background:#38bdf8; color:white; text-align:center; font-size:11px;">
+            <div style="width:120px; background:{}; border-radius:5px; overflow:hidden;">
+                <div style="width:{}%; background:{}; color:white; text-align:center; font-size:11px;">
                     {}%
                 </div>
             </div>
-            <small>Bal: {}</small>
+            <small style="color:{};">Bal: {}</small>
             """,
-            percentage_str, percentage_str, balance
+            bg_color, percentage_str, bar_color, percentage_str, bar_color, balance
         )
-    
     progress_balance.short_description = "Balance Progress"
     
     def progress_days(self, obj):
