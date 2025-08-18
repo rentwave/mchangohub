@@ -550,7 +550,7 @@ class BillingAdmin(View):
             receipt = response.data.get('TransactionID')
             topup_result = InitiateTopup().post(
                 contribution_id=pledge.contribution.id,
-                **{**data, 'ref': reference, 'charge': charge, 'receipt': receipt}
+                **{**data, 'ref': reference, 'charge': charge, "amount_plus_charge":total_amount,'receipt': receipt}
             )
             pledge.add_payment(base_amount, user=pledge.pledger_name, note="")
             logger.info(f"Pledge cleared successfully: {pledge.id} ({topup_result})")
