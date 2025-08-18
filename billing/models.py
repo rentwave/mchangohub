@@ -743,7 +743,6 @@ class WalletTransaction(BaseModel):
         return f"{self.transaction_type} - {self.amount} - {self.reference} ({self.status})"
 
 
-
 class BalanceLog(BaseModel):
     """BalanceLog Model. This model defines the actual execution carried out by a rule profile execution."""
     transaction = models.ForeignKey(WalletTransaction, on_delete=models.CASCADE)

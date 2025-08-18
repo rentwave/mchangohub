@@ -24,10 +24,11 @@ class GenericBaseModel(BaseModel):
 
 
 
-
 class State(GenericBaseModel):
     """States for life cycle of transactions and events"""
-
+    
+    abbreviation = models.CharField(max_length=10,blank=True, null=True)
+    color = models.CharField(max_length=7, blank=True, null=True)
     class Meta(object):
         ordering = ('name',)
         unique_together = ('name',)

@@ -36,30 +36,28 @@ class StateAdmin(admin.ModelAdmin):
 
     color_display.short_description = "Color"
 
-    def get_state_color(state_name, default_color="#6c757d"):
-        """Get color for state, with fallbacks for common state names"""
-        color_mapping = {
-            'pending': '#dc3545',  # Red
-            'partially paid': '#ffc107',  # Yellow/Orange
-            'cleared': '#28a745',  # Green
-            'cancelled': '#6c757d',  # Gray
-            'overdue': '#fd7e14',  # Orange
-            'confirmed': '#17a2b8',  # Teal
-            'processing': '#007bff',  # Blue
-            'on hold': '#6f42c1',  # Purple
-        }
+def get_state_color(state_name, default_color="#6c757d"):
+    """Get color for state, with fallbacks for common state names"""
+    color_mapping = {
+        'pending': '#dc3545',
+        'partially paid': '#ffc107',
+        'cleared': '#28a745',
+        'cancelled': '#6c757d',
+        'overdue': '#fd7e14',
+        'confirmed': '#17a2b8',
+        'processing': '#007bff',
+        'on hold': '#6f42c1',
+    }
 
-        # Try exact match first
-        state_key = state_name.lower().strip()
-        if state_key in color_mapping:
-            return color_mapping[state_key]
+    state_key = state_name.lower().strip()
+    if state_key in color_mapping:
+        return color_mapping[state_key]
 
-        # Try partial matches
-        for key, color in color_mapping.items():
-            if key in state_key or state_key in key:
-                return color
+    for key, color in color_mapping.items():
+        if key in state_key or state_key in key:
+            return color
 
-        return default_color
+    return default_color
 
 
 @admin.register(BalanceEntryType)
