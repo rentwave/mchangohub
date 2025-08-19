@@ -84,7 +84,7 @@ def generate_contribution_summary_statement_pdf(
     else:
         logo = Paragraph("<b>MCHANGO HUB</b>", sub_heading)
 
-    heading_para = Paragraph("<b>MCHANGO HUB</b><br/>SUMMARY STATEMENT", main_heading)
+    heading_para = Paragraph("<b>MCHANGO HUB SUMMARY STATEMENT</b>", main_heading)
     tagline_para = Paragraph("Your Digital Financial Partner", sub_heading)
 
     header_content = Table(
@@ -102,11 +102,12 @@ def generate_contribution_summary_statement_pdf(
     elements.append(header_content)
     elements.append(Spacer(1, 20))
 
+    # ✅ Updated Summary Table
     acc_info = [
-        ["Contribution Name:", contribution_name, "Period From:", period_start.strftime("%Y-%m-%d")],
-        ["Target Amount:", f"KES {target_amount:,.2f}", "Period To:", period_end.strftime("%Y-%m-%d")],
-        ["Statement Date:", datetime.now().strftime("%Y-%m-%d"), "Remaining:", f"KES {remaining:,.2f}"],
-        ["Total Contributed:", f"KES {total_contributed:,.2f}", "", ""],
+        ["Contribution Name:", contribution_name, "Statement Date:", datetime.now().strftime("%Y-%m-%d")],
+        ["Target Amount:", f"KES {target_amount:,.2f}", "Total Contributed:", f"KES {total_contributed:,.2f}"],
+        ["Remaining Amount:", f"KES {remaining:,.2f}", "Period From:", period_start.strftime("%Y-%m-%d")],
+        ["", "", "Period To:", period_end.strftime("%Y-%m-%d")],
     ]
     acc_table = Table(acc_info, colWidths=[usable_width * 0.2, usable_width * 0.3,
                                            usable_width * 0.2, usable_width * 0.3])
@@ -121,12 +122,12 @@ def generate_contribution_summary_statement_pdf(
     wrap_style = ParagraphStyle(name="WrapStyle", fontSize=8, leading=10, wordWrap="CJK")
 
     chunk_size = 10
+    running = Decimal("0.00")  # running balance across pages
     for chunk_start in range(0, len(txs), chunk_size):
         chunk = txs[chunk_start:chunk_start + chunk_size]
 
         data = [["Date/Time", "Type", "Narration", "Reference", "Paid In", "Withdrawn", "Balance"]]
 
-        running = Decimal("0.00")
         for t in chunk:
             paid_in = Decimal(str(t.get("paid_in", 0) or 0))
             withdrawn = Decimal(str(t.get("withdrawn", 0) or 0))
