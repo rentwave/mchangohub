@@ -1,3 +1,5 @@
+import os
+
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -6,6 +8,8 @@ from reportlab.lib.units import cm
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Optional
+
+from mchangohub import settings
 
 
 def generate_mpesa_statement_pdf(
@@ -30,14 +34,17 @@ def generate_mpesa_statement_pdf(
         - withdrawn: Decimal/float
         - charge: Decimal/float
     """
-
+    
+    temp_dir = os.path.join(settings.BASE_DIR, "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    
     if filename is None:
         safe_msisdn = msisdn.replace("+", "")
         filename = f"Mchango_Hub_Statement_{safe_msisdn}_{period_start:%Y%m%d}_to_{period_end:%Y%m%d}.pdf"
-
+    
+    file_path = os.path.join(temp_dir, filename)
     txs = sorted(transactions, key=lambda x: x["timestamp"])
     running = opening_balance
-
     total_in = sum(Decimal(str(t.get("paid_in", 0) or 0)) for t in txs)
     total_out = sum(Decimal(str(t.get("withdrawn", 0) or 0)) for t in txs)
     total_charges = sum(Decimal(str(t.get("charge", 0) or 0)) for t in txs)
@@ -93,10 +100,7 @@ def generate_mpesa_statement_pdf(
     ]))
     elements.append(table)
     elements.append(Spacer(1, 18))
-
     data = [["Date/Time", "Type", "Narration", "Reference", "Counterparty", "Paid In", "Withdrawn", "Charge", "Balance"]]
-
-    # Transactions rows
     for t in txs:
         paid_in = Decimal(str(t.get("paid_in", 0) or 0))
         withdrawn = Decimal(str(t.get("withdrawn", 0) or 0))
@@ -115,7 +119,6 @@ def generate_mpesa_statement_pdf(
             f"{charge:,.2f}" if charge else "",
             f"{running:,.2f}",
         ])
-
     table = Table(data, repeatRows=1, colWidths=[3*cm, 3*cm, 5*cm, 3*cm, 4*cm, 2.5*cm, 2.5*cm, 2.5*cm, 3*cm])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#E6F0FF")),
@@ -128,8 +131,7 @@ def generate_mpesa_statement_pdf(
         ("INNERGRID", (0,0), (-1,-1), 0.25, colors.grey),
         ("BOX", (0,0), (-1,-1), 0.25, colors.grey),
     ]))
-
     elements.append(table)
     doc.build(elements)
-    return filename
+    return file_path
 

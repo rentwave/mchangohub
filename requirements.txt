@@ -35,3 +35,4 @@ tenacity==9.0.0
 prometheus-client==0.20.0
 structlog==24.1.0
 django-redis==5.4.0
+reportlab==4.2.2
