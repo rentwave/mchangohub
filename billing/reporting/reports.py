@@ -163,6 +163,7 @@ class StatementGenerator:
 		).order_by("-date_created")
 		trx_list = [
 			{
+				"timestamp": trx.date_created,
 				"pledger_name": trx.pledger_name,
 				"pledger_contact": trx.pledger_contact,
 				"amount": trx.amount or 0,
