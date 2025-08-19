@@ -6,6 +6,8 @@ from dateutil.parser import parse
 from django.views.decorators.csrf import csrf_exempt
 
 from base.backend.service import WalletTransactionService, WalletAccountService
+from billing.models import Pledge
+from billing.reporting.pledge_summary import generate_pledge_summary_pdf
 from billing.reporting.statements import generate_mpesa_statement_pdf
 from billing.reporting.summary_report import generate_contribution_summary_statement_pdf
 from contributions.backend.services import ContributionService
@@ -147,6 +149,56 @@ class StatementGenerator:
 		response = FileResponse(open(file_path, "rb"), content_type="application/pdf")
 		response["Content-Disposition"] = f'attachment; filename="statement.pdf"'
 		return response
+
+	@csrf_exempt
+	def generate_pledge_summary_statement(self, request) -> FileResponse:
+		"""
+        Generate an MPESA-style PDF statement for a contribution's wallet account
+        and return it as a downloadable response.
+        """
+		data = unpack_request_data(request)
+		start_date = parse(data.get('start_date')).replace(hour=0, minute=0, second=0, microsecond=0) if data.get(
+			'start_date') else None
+		end_date = parse(data.get('end_date')).replace(hour=23, minute=59, second=59, microsecond=999999) if data.get(
+			'start_date') else None
+		contribution = ContributionService().get(id=data.get("contribution"))
+		if not start_date or not end_date:
+			pledges = Pledge.objects.filter(
+				contribution=contribution, status__name="Completed"
+			).order_by("-date_created")
+		else:
+			pledges = Pledge.objects.filter(
+				contribution=contribution, status__name="Completed", date_created__gte=start_date,
+				date_created__lte=end_date
+			).order_by("-date_created")
+		trx_list = [
+			{
+				"pledger_name": trx.pledger_name,
+				"pledger_contact": trx.pledger_contact,
+				"amount": trx.amount or 0,
+				"planned_clear_date": trx.planned_clear_date,
+				"status": trx.status,
+			}
+			for trx in pledges
+		]
+		trx_list.sort(key=lambda x: x["timestamp"])
+		file_path = generate_pledge_summary_pdf(
+			pledges=trx_list,
+			contribution_name=contribution.name,
+			period_start=data.get("start_date", trx_list[0]["timestamp"] if trx_list else datetime.now()),
+			period_end=data.get("end_date", trx_list[-1]["timestamp"] if trx_list else datetime.now()),
+			filename=(
+				f"summary_{contribution.name}_"
+				f"{(parse(data.get('start_date')).strftime('%Y%m%d') if data.get('start_date') else contribution.date_created.strftime('%Y%m%d'))}"
+				f"_to_"
+				f"{(parse(data.get('end_date')).strftime('%Y%m%d') if data.get('end_date') else datetime.now().strftime('%Y%m%d'))}.pdf"
+			)
+		)
+		if not os.path.exists(file_path):
+			raise Http404("Statement not found.")
+		response = FileResponse(open(file_path, "rb"), content_type="application/pdf")
+		response["Content-Disposition"] = f'attachment; filename="statement.pdf"'
+		return response
 	
 
 
@@ -156,4 +208,5 @@ from django.urls import path
 urlpatterns = [
 	path('generate/', StatementGenerator().generate_statement, name='generate'),
 	path('summary/', StatementGenerator().generate_summary_statement, name='summary'),
+	path('pledge/', StatementGenerator().generate_pledge_summary_statement, name='pledge'),
 ]
