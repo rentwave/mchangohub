@@ -106,7 +106,7 @@ def generate_mpesa_statement_pdf(
             )
         )
 
-    heading_para = Paragraph("<b>MCHANGO HUB FULL STATEMENT </br>", main_heading)
+    heading_para = Paragraph("<b>MCHANGO HUB FULL STATEMENT </b>", main_heading)
     tagline_para = Paragraph("Your Digital Financial Partner", sub_heading)
 
     # Header table (3 columns)

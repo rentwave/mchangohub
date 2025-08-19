@@ -47,11 +47,16 @@ class PledgeNumberedCanvas:
             stroke=1
         )
 
-        # Draw footer text
+        # Draw footer text - FIXED: Use drawString with manual centering
         self.canvas.setFillColor(colors.black)
         self.canvas.setFont("Helvetica", 8)
-        self.canvas.drawCentredText(
-            page_width / 2,
+
+        # Calculate center position manually
+        text_width = self.canvas.stringWidth(footer_text, "Helvetica", 8)
+        center_x = page_width / 2 - text_width / 2
+
+        self.canvas.drawString(
+            center_x,
             self.doc.bottomMargin - 20,
             footer_text
         )
@@ -72,20 +77,31 @@ class PledgeNumberedCanvas:
                 stroke=1
             )
 
-            # Header text
+            # Header text - FIXED: Use drawString with manual centering
             self.canvas.setFillColor(colors.black)
+
+            # Main header
+            header_main = f"MCHANGO HUB PLEDGE SUMMARY - {self.contribution_name}"
             self.canvas.setFont("Helvetica-Bold", 12)
-            self.canvas.drawCentredText(
-                page_width / 2,
+            main_text_width = self.canvas.stringWidth(header_main, "Helvetica-Bold", 12)
+            main_center_x = page_width / 2 - main_text_width / 2
+
+            self.canvas.drawString(
+                main_center_x,
                 page_height - self.doc.topMargin + 20,
-                f"MCHANGO HUB PLEDGE SUMMARY - {self.contribution_name}"
+                header_main
             )
 
+            # Sub header
+            header_sub = f"Report Period: {self.period_start.strftime('%Y-%m-%d')} to {self.period_end.strftime('%Y-%m-%d')}"
             self.canvas.setFont("Helvetica", 9)
-            self.canvas.drawCentredText(
-                page_width / 2,
+            sub_text_width = self.canvas.stringWidth(header_sub, "Helvetica", 9)
+            sub_center_x = page_width / 2 - sub_text_width / 2
+
+            self.canvas.drawString(
+                sub_center_x,
                 page_height - self.doc.topMargin + 5,
-                f"Report Period: {self.period_start.strftime('%Y-%m-%d')} to {self.period_end.strftime('%Y-%m-%d')}"
+                header_sub
             )
 
 
