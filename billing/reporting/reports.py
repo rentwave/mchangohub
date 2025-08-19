@@ -72,7 +72,7 @@ class StatementGenerator:
 		trx_list.sort(key=lambda x: x["timestamp"])
 		file_path = generate_mpesa_statement_pdf(
 			transactions=trx_list,
-			customer_name=f"{contribution.creator.first_name} {contribution.creator.last_name}",
+			customer_name=f"{contribution.name}",
 			msisdn=contribution.creator.phone_number,
 			account_number=str(wallet_account.account_number),
 			period_start=data.get("start_date", trx_list[0]["timestamp"] if trx_list else datetime.now()),
