@@ -25,7 +25,7 @@ import logging
 from billing.itergrations.pesaway import PesaWayAPIClient
 from billing.models import Pledge
 from contributions.backend.services import ContributionService
-from users.backend.services import UserService
+from users.backend.services import UserService, RoleService
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +415,8 @@ class BillingAdmin(View):
                 )
             actioned_by = UserService().filter(phone_number=data.get('phone_number')).first()
             if not actioned_by:
-                actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=data.get('first_name', 'Anonymous'), last_name=data.get('last_name', 'Name'), is_active=True)
+                role = RoleService().get(name="USER")
+                actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=data.get('first_name', 'Anonymous'), last_name=data.get('last_name', 'Name'), role=role)
             receipt = response.data.get('TransactionID')
             topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt, 'actioned_by': actioned_by}
             topup_result = InitiateTopup().post(
