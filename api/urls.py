@@ -5,4 +5,6 @@ urlpatterns = [
     path('contributions/', include('contributions.urls')),
     path('otps/', include('otps.urls')),
     path('users/', include('users.urls')),
+    path('billing/', include('billing.views')),
+
 ]

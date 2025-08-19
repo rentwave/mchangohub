@@ -40,8 +40,7 @@ def generate_mpesa_statement_pdf(
     
     if filename is None:
         safe_msisdn = msisdn.replace("+", "")
-        filename = f"Mchango_Hub_Statement_{safe_msisdn}_{period_start:%Y%m%d}_to_{period_end:%Y%m%d}.pdf"
-    
+        filename = f"{filename}_{safe_msisdn}.pdf"
     file_path = os.path.join(temp_dir, filename)
     txs = sorted(transactions, key=lambda x: x["timestamp"])
     running = opening_balance

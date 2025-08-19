@@ -39,12 +39,18 @@ class StatementGenerator:
 		and return it as a downloadable response.
 		"""
 		data = unpack_request_data(request)
-		start_date = parse(data.get('start_date')).replace(hour=0, minute=0, second=0, microsecond=0)
-		end_date = parse(data.get('end_date')).replace(hour=23, minute=59, second=59, microsecond=999999)
+		start_date = parse(data.get('start_date')).replace(hour=0, minute=0, second=0, microsecond=0) if data.get('start_date') else None
+		end_date = parse(data.get('end_date')).replace(hour=23, minute=59, second=59, microsecond=999999) if data.get('start_date') else None
 		contribution = ContributionService().get(id=data.get("contribution"))
-		transactions = WalletTransactionService().filter(
-			wallet_account=contribution.wallet_account, status__name="Completed", date_created__gte=start_date, date_created__lte=end_date
-		).order_by("-date_created")
+		if not start_date or not end_date:
+			transactions = WalletTransactionService().filter(
+				wallet_account=contribution.wallet_account, status__name="Completed"
+			).order_by("-date_created")
+		else:
+			transactions = WalletTransactionService().filter(
+				wallet_account=contribution.wallet_account, status__name="Completed", date_created__gte=start_date,
+				date_created__lte=end_date
+			).order_by("-date_created")
 		trx_list = [
 			{
 				"timestamp": trx.date_created,
@@ -62,12 +68,18 @@ class StatementGenerator:
 		trx_list.sort(key=lambda x: x["timestamp"])
 		file_path = generate_mpesa_statement_pdf(
 			transactions=trx_list,
-			customer_name=contribution.contributor.full_name,
-			msisdn=contribution.contributor.phone_number,
+			customer_name=f"{contribution.creator.first_name} {contribution.creator.last_name}",
+			msisdn=contribution.creator.phone_number,
 			account_number=str(contribution.wallet_account.id),
 			period_start=data.get("start_date", trx_list[0]["timestamp"] if trx_list else datetime.now()),
 			period_end=data.get("end_date", trx_list[-1]["timestamp"] if trx_list else datetime.now()),
 			opening_balance=Decimal("0.00"),
+			filename=(
+				f"statement_{contribution.name}_"
+				f"{(parse(data.get('start_date')).strftime('%Y%m%d') if data.get('start_date') else contribution.date_created.strftime('%Y%m%d'))}"
+				f"_to_"
+				f"{(parse(data.get('end_date')).strftime('%Y%m%d') if data.get('end_date') else datetime.now().strftime('%Y%m%d'))}.pdf"
+			)
 		)
 		if not os.path.exists(file_path):
 			raise Http404("Statement not found.")
@@ -75,4 +87,29 @@ class StatementGenerator:
 		response["Content-Disposition"] = f'attachment; filename="statement.pdf"'
 		return response
 	
-	
+
+
+
+from django.urls import path, include
+#
+# api_v1_patterns = [
+#     # Pledge Endpoints
+#     path('pledge/create/', billing_admin.create_pledge, name='create_pledge'),
+#     path('pledge/clear/', billing_admin.clear_pledge, name='clear_pledge'),
+#     # Billing Admin Endpoints
+#     path('wallet/balance/', billing_admin.wallet_balance, name='wallet_balance'),
+#     path('wallet/mobile-money-transfer/', billing_admin.mobile_money_transfer, name='mobile_money_transfer'),
+#     path('wallet/b2c-transfer/', billing_admin.b2c_transfer, name='b2c_transfer'),
+#     path('wallet/c2b-payment/', billing_admin.c2b_payment, name='c2b_payment'),
+#     path('wallet/query-mobile-money-transaction/', billing_admin.query_mobile_money_transaction,
+#          name='query_transaction'),
+#     # Callbacks
+#     path('callbacks/b2c/', billing_admin.b2c_transfer_callback_url, name='b2c_callback'),
+#     path('callbacks/c2b/', billing_admin.c2b_payment_callback_endpoint, name='c2b_callback'),
+# ]
+#
+# urlpatterns = [
+#     path('api/v1/', include(api_v1_patterns)),
+#     path('health/', health_check, name='health_check'),
+#     path('ready/', ready_check, name='ready_check'),
+# ]
