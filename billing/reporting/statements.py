@@ -1,8 +1,7 @@
 import os
-
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from datetime import datetime
@@ -23,7 +22,7 @@ def generate_mpesa_statement_pdf(
 		filename: Optional[str] = None,
 ) -> str:
 	"""
-    Generate an MPESA-like statement as PDF.
+    Generate an MPESA-like statement as PDF with a styled header in purple and green.
     transactions: list of dicts with keys:
         - timestamp: datetime
         - type: str
@@ -51,6 +50,8 @@ def generate_mpesa_statement_pdf(
 	net_movement = total_in - (total_out + total_charges)
 	closing_balance = opening_balance + net_movement
 	
+	faint_green = colors.HexColor("#F0F9F0")
+	
 	doc = SimpleDocTemplate(
 		file_path,
 		pagesize=landscape(A4),
@@ -59,70 +60,135 @@ def generate_mpesa_statement_pdf(
 		topMargin=1 * cm,
 		bottomMargin=1 * cm,
 	)
+	
 	styles = getSampleStyleSheet()
 	normal = styles["Normal"]
-	heading = ParagraphStyle(name="Heading", fontSize=14, leading=16, alignment=1, spaceAfter=10, bold=True)
+	
+	main_heading = ParagraphStyle(
+		name="MainHeading",
+		fontSize=18,
+		leading=22,
+		alignment=1,
+		spaceAfter=10,
+		textColor=colors.black,
+		fontName="Helvetica-Bold"
+	)
+	
+	sub_heading = ParagraphStyle(
+		name="SubHeading",
+		fontSize=12,
+		leading=14,
+		alignment=1,
+		spaceAfter=5,
+		textColor=colors.black,
+		fontName="Helvetica-Bold"
+	)
 	
 	elements = []
 	
-	elements.append(Paragraph("<b>MCHANGO HUB STATEMENT</b>", heading))
-	elements.append(Spacer(1, 12))
+	logo_path = os.path.join(settings.BASE_DIR, "templates", "mchango.jpg")
+	if os.path.exists(logo_path):
+		logo = Image(logo_path, width=3 * cm, height=3 * cm)
+	else:
+		logo_placeholder = Paragraph(
+			"<b>MCHANGO<br/>HUB</b>",
+			ParagraphStyle(
+				name="LogoStyle",
+				fontSize=14,
+				leading=16,
+				alignment=1,
+				textColor=colors.black,
+				fontName="Helvetica-Bold"
+			)
+		)
+		logo = logo_placeholder
+	
+	heading_para = Paragraph("<b>MCHANGO HUB</b><br/>STATEMENT", main_heading)
+	tagline_para = Paragraph("Your Digital Financial Partner", sub_heading)
+	
+	header_content = Table(
+		[[logo, heading_para, tagline_para]],
+		colWidths=[4 * cm, 15 * cm, 8 * cm]
+	)
+	header_content.setStyle(TableStyle([
+		("BACKGROUND", (0, 0), (-1, -1), faint_green),
+		("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+		("ALIGN", (0, 0), (0, 0), "CENTER"),
+		("ALIGN", (1, 0), (1, 0), "CENTER"),
+		("ALIGN", (2, 0), (2, 0), "RIGHT"),
+		("LEFTPADDING", (0, 0), (-1, -1), 10),
+		("RIGHTPADDING", (0, 0), (-1, -1), 10),
+		("TOPPADDING", (0, 0), (-1, -1), 15),
+		("BOTTOMPADDING", (0, 0), (-1, -1), 15),
+		("BOX", (0, 0), (-1, -1), 1, colors.grey),
+	]))
+	elements.append(header_content)
+	elements.append(Spacer(1, 20))
 	
 	acc_info = [
-		["Account Name:", customer_name, "MSISDN:", msisdn],
+		["Account Name:", customer_name, "Admin Contact:", msisdn],
 		["Account No:", account_number or "—", "Period From:", period_start.strftime("%Y-%m-%d")],
-		["", "", "Period To:", period_end.strftime("%Y-%m-%d")],
-		["Opening Balance:", f"{opening_balance:,.2f}", "Closing Balance:", f"{closing_balance:,.2f}"],
+		["Statement Date:", datetime.now().strftime("%Y-%m-%d"), "Period To:", period_end.strftime("%Y-%m-%d")],
+		["Opening Balance:", f"KES {opening_balance:,.2f}", "Closing Balance:", f"KES {closing_balance:,.2f}"],
 	]
-	table = Table(acc_info, colWidths=[3 * cm, 6 * cm, 3 * cm, 6 * cm])
-	table.setStyle(TableStyle([
+	
+	acc_table = Table(acc_info, colWidths=[3.5 * cm, 6 * cm, 3.5 * cm, 6 * cm])
+	acc_table.setStyle(TableStyle([
 		("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
 		("FONTSIZE", (0, 0), (-1, -1), 10),
+		("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+		("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
 		("ALIGN", (1, 0), (1, -1), "LEFT"),
+		("ALIGN", (3, 0), (3, -1), "LEFT"),
 		("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-		("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+		("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+		("INNERGRID", (0, 0), (-1, -1), 0.25, colors.grey),
+		("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+		("TOPPADDING", (0, 0), (-1, -1), 8),
 	]))
-	elements.append(table)
-	elements.append(Spacer(1, 12))
+	elements.append(acc_table)
+	elements.append(Spacer(1, 15))
 	
 	summary_data = [
-		["Total In", f"{total_in:,.2f}", "Total Out", f"{total_out:,.2f}", "Total Charges", f"{total_charges:,.2f}",
-		 "Net Movement", f"{net_movement:,.2f}"],
+		["Total In", f"KES {total_in:,.2f}", "Total Out", f"KES {total_out:,.2f}",
+		 "Total Charges", f"KES {total_charges:,.2f}", "Net Movement", f"KES {net_movement:,.2f}"],
 	]
-	table = Table(summary_data, colWidths=[3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm])
-	table.setStyle(TableStyle([
-		("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E6F0FF")),
+	summary_table = Table(summary_data, colWidths=[3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm])
+	summary_table.setStyle(TableStyle([
+		("BACKGROUND", (0, 0), (-1, 0), faint_green),
 		("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
 		("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+		("ALIGN", (0, 0), (0, -1), "CENTER"),
 		("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
 		("FONTSIZE", (0, 0), (-1, -1), 9),
-		("BOX", (0, 0), (-1, -1), 0.25, colors.grey),
-		("INNERGRID", (0, 0), (-1, -1), 0.25, colors.grey),
+		("BOX", (0, 0), (-1, -1), 1, colors.grey),
+		("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
+		("TOPPADDING", (0, 0), (-1, -1), 10),
+		("BOTTOMPADDING", (0, 0), (-1, -1), 10),
 	]))
-	elements.append(table)
-	elements.append(Spacer(1, 18))
+	elements.append(summary_table)
+	elements.append(Spacer(1, 20))
 	
-	data = [
-		["Date/Time", "Type", "Narration", "Reference", "Counterparty", "Paid In", "Withdrawn", "Charge", "Balance"]]
+	data = [["Date/Time", "Type", "Narration", "Reference", "Counterparty",
+	         "Paid In", "Withdrawn", "Charge", "Balance"]]
 	
 	wrap_style = ParagraphStyle(
 		name="WrapStyle",
 		fontSize=8,
 		leading=10,
-		wordWrap="CJK"  # ensures wrapping even for long words
+		wordWrap="CJK"
 	)
 	
-	for t in txs:
+	for i, t in enumerate(txs):
 		paid_in = Decimal(str(t.get("paid_in", 0) or 0))
 		withdrawn = Decimal(str(t.get("withdrawn", 0) or 0))
 		charge = Decimal(str(t.get("charge", 0) or 0))
 		running += paid_in
 		running -= (withdrawn + charge)
 		
-		# narration: wrap after 4 words max per line
 		narration_text = t.get("narration", "")
 		words = narration_text.split()
-		wrapped_lines = [" ".join(words[i:i + 4]) for i in range(0, len(words), 4)]
+		wrapped_lines = [" ".join(words[j:j + 4]) for j in range(0, len(words), 4)]
 		narration_para = Paragraph("<br/>".join(wrapped_lines), wrap_style)
 		
 		data.append([
@@ -131,26 +197,60 @@ def generate_mpesa_statement_pdf(
 			narration_para,
 			t.get("reference", ""),
 			t.get("counterparty", ""),
-			f"{paid_in:,.2f}" if paid_in else "",
-			f"{withdrawn:,.2f}" if withdrawn else "",
-			f"{charge:,.2f}" if charge else "",
-			f"{running:,.2f}",
+			f"KES {paid_in:,.2f}" if paid_in else "",
+			f"KES {withdrawn:,.2f}" if withdrawn else "",
+			f"KES {charge:,.2f}" if charge else "",
+			f"KES {running:,.2f}",
 		])
 	
-	table = Table(data, repeatRows=1,
-	              colWidths=[3 * cm, 3 * cm, 5 * cm, 3 * cm, 4 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 3 * cm])
-	table.setStyle(TableStyle([
-		("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E6F0FF")),
+	transaction_table = Table(data, repeatRows=1,
+	                          colWidths=[3 * cm, 3 * cm, 5 * cm, 3 * cm, 4 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 3 * cm])
+	
+	table_style_commands = [
+		("BACKGROUND", (0, 0), (-1, 0), faint_green),
 		("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+		("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+		("FONTSIZE", (0, 0), (-1, 0), 10),
 		("ALIGN", (0, 0), (4, -1), "LEFT"),
 		("ALIGN", (5, 0), (-1, -1), "RIGHT"),
-		("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-		("FONTSIZE", (0, 0), (-1, 0), 9),
 		("FONTSIZE", (0, 1), (-1, -1), 8),
 		("INNERGRID", (0, 0), (-1, -1), 0.25, colors.grey),
-		("BOX", (0, 0), (-1, -1), 0.25, colors.grey),
+		("BOX", (0, 0), (-1, -1), 1, colors.grey),
 		("VALIGN", (0, 1), (-1, -1), "TOP"),
+		("TOPPADDING", (0, 0), (-1, -1), 8),
+		("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+	]
+	
+	for row_idx in range(1, len(data)):
+		if data[row_idx][5]:
+			table_style_commands.append(("FONTNAME", (5, row_idx), (5, row_idx), "Helvetica-Bold"))
+		
+		table_style_commands.append(("FONTNAME", (8, row_idx), (8, row_idx), "Helvetica-Bold"))
+	
+	transaction_table.setStyle(TableStyle(table_style_commands))
+	elements.append(transaction_table)
+	
+	elements.append(Spacer(1, 20))
+	footer_para = Paragraph(
+		f"<b>Generated on:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | "
+		f"<b>Page 1 of 1</b> | "
+		f"<b>Mchango Hub Digital Services</b>",
+		ParagraphStyle(
+			name="Footer",
+			fontSize=8,
+			alignment=1,
+			textColor=colors.black,
+			fontName="Helvetica"
+		)
+	)
+	
+	footer_table = Table([[footer_para]], colWidths=[27 * cm])
+	footer_table.setStyle(TableStyle([
+		("BOX", (0, 0), (-1, -1), 1, colors.grey),
+		("TOPPADDING", (0, 0), (-1, -1), 8),
+		("BOTTOMPADDING", (0, 0), (-1, -1), 8),
 	]))
-	elements.append(table)
+	elements.append(footer_table)
+	
 	doc.build(elements)
 	return file_path
