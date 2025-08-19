@@ -415,8 +415,12 @@ class BillingAdmin(View):
                 )
             actioned_by = UserService().filter(phone_number=data.get('phone_number')).first()
             if not actioned_by:
+                names = data.get('full_name', 'Anonymous User').strip()
+                parts = names.split(maxsplit=1)
+                first_name = parts[0] if parts else "Anonymous"
+                last_name = parts[1] if len(parts) > 1 else "User"
                 role = RoleService().get(name="USER")
-                actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=data.get('first_name', 'Anonymous'), last_name=data.get('last_name', 'Name'), role=role)
+                actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=first_name, last_name=last_name, role=role)
             receipt = response.data.get('TransactionID')
             topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt, 'actioned_by': actioned_by}
             topup_result = InitiateTopup().post(
@@ -465,8 +469,8 @@ class BillingAdmin(View):
                     "Invalid amount provided",
                     status=400
                 )
-            pledger_name = data.get('pledger_name') or 'Anonymous'
-            pledger_contact = data.get('pledger_contact') or 'Anonymous'
+            pledger_name = data.get('full_name') or 'Anonymous'
+            pledger_contact = data.get('phone_number') or 'Anonymous'
             purpose = data.get('purpose') or 'No purpose specified'
             contribution = ContributionService().get(id=data.get('contribution'))
             if not contribution:
