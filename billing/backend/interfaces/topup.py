@@ -286,10 +286,16 @@ class ApproveTopupTransaction(InterfaceBase):
                 return validation_error
             try:
                 with trx.atomic():
-                    description = (
-                        f"Contribution approved for {transaction_history.wallet_account.contribution.name} "
-                        f"with reference {transaction_history.reference}"
-                    )
+                    if transaction_history.actioned_by:
+                        description = (
+                            f"Received contribution from {transaction_history.actioned_by.phone_number} "
+                            f"to {transaction_history.wallet_account.contribution.name} (Ref: {transaction_history.reference})"
+                        )
+                    else:
+                        description = (
+                            f"Received contribution to {transaction_history.wallet_account.contribution.name} "
+                            f"(Ref: {transaction_history.reference})"
+                        )
                     approved_transaction = self.approve_transaction(
                         transaction_id=transaction_history.id,
                         contribution=transaction_history.wallet_account.contribution,

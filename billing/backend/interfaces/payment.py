@@ -283,13 +283,16 @@ class ApprovePaymentTransaction(InterfaceBase):
                 with trx.atomic():
                     if transaction_history.actioned_by:
                         description = (
-                            f"Withdrawal approved for {account.contribution.name} "
-                            f"to {transaction_history.actioned_by.phone_number} with reference {transaction_history.receipt_number}"
+                            f"Withdrawal of {account.contribution.name} "
+                            f"(Ref: {transaction_history.receipt_number}) "
+                            f"processed by {transaction_history.actioned_by.phone_number}, "
+                            f"sent to {transaction_history.wallet_account.contribution.creator.phone_number}"
                         )
                     else:
                         description = (
-                            f"Withdrawal approved for {account.contribution.name} "
-                            f"with reference {transaction_history.receipt_number}"
+                            f"Withdrawal of {account.contribution.name} "
+                            f"(Ref: {transaction_history.receipt_number}) "
+                            f"sent to {transaction_history.wallet_account.contribution.creator.phone_number}"
                         )
                     approved_transaction = self.approve_transaction(
                         transaction_id=transaction_history.id,
