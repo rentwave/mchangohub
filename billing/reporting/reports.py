@@ -157,20 +157,10 @@ class StatementGenerator:
         and return it as a downloadable response.
         """
 		data = unpack_request_data(request)
-		start_date = parse(data.get('start_date')).replace(hour=0, minute=0, second=0, microsecond=0) if data.get(
-			'start_date') else None
-		end_date = parse(data.get('end_date')).replace(hour=23, minute=59, second=59, microsecond=999999) if data.get(
-			'start_date') else None
 		contribution = ContributionService().get(id=data.get("contribution"))
-		if not start_date or not end_date:
-			pledges = Pledge.objects.filter(
-				contribution=contribution, status__name="Completed"
-			).order_by("-date_created")
-		else:
-			pledges = Pledge.objects.filter(
-				contribution=contribution, status__name="Completed", date_created__gte=start_date,
-				date_created__lte=end_date
-			).order_by("-date_created")
+		pledges = Pledge.objects.filter(
+			contribution=contribution
+		).order_by("-date_created")
 		trx_list = [
 			{
 				"pledger_name": trx.pledger_name,

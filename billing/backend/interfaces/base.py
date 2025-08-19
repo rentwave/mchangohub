@@ -226,7 +226,7 @@ class InterfaceBase(AuditManagementService):
 			if transaction_type == "CR":
 				account.topup_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description, receipt=receipt,)
 			else:
-				account.payment_approved(amount=transaction_obj.amount_plus_charge, reference=transaction_obj.reference, description=description, receipt=receipt,)
+				account.payment_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description, receipt=receipt,)
 			balance_logs = BalanceLogService().filter(transaction=transaction_obj)
 			balance_log_ids = list(balance_logs.values_list('id', flat=True))
 			if balance_log_ids:
