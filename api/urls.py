@@ -6,5 +6,6 @@ urlpatterns = [
     path('otps/', include('otps.urls')),
     path('users/', include('users.urls')),
     path('billing/', include('billing.views')),
+    path('statements/', include('billing.reporting.reports')),
 
 ]

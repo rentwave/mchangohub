@@ -3,8 +3,9 @@ import logging
 from typing import Dict, Any
 
 from dateutil.parser import parse
+from django.views.decorators.csrf import csrf_exempt
 
-from base.backend.service import WalletTransactionService
+from base.backend.service import WalletTransactionService, WalletAccountService
 from billing.reporting.statements import generate_mpesa_statement_pdf
 from contributions.backend.services import ContributionService
 from django.http import FileResponse, Http404
@@ -33,6 +34,7 @@ def unpack_request_data(request) -> Dict[str, Any]:
 
 class StatementGenerator:
 	
+	@csrf_exempt
 	def generate_statement(self, request) -> FileResponse:
 		"""
 		Generate an MPESA-style PDF statement for a contribution's wallet account
@@ -42,13 +44,15 @@ class StatementGenerator:
 		start_date = parse(data.get('start_date')).replace(hour=0, minute=0, second=0, microsecond=0) if data.get('start_date') else None
 		end_date = parse(data.get('end_date')).replace(hour=23, minute=59, second=59, microsecond=999999) if data.get('start_date') else None
 		contribution = ContributionService().get(id=data.get("contribution"))
+		wallet_account = WalletAccountService().get(contribution=contribution)
 		if not start_date or not end_date:
+			
 			transactions = WalletTransactionService().filter(
-				wallet_account=contribution.wallet_account, status__name="Completed"
+				wallet_account=wallet_account, status__name="Completed"
 			).order_by("-date_created")
 		else:
 			transactions = WalletTransactionService().filter(
-				wallet_account=contribution.wallet_account, status__name="Completed", date_created__gte=start_date,
+				wallet_account=wallet_account, status__name="Completed", date_created__gte=start_date,
 				date_created__lte=end_date
 			).order_by("-date_created")
 		trx_list = [
@@ -56,7 +60,7 @@ class StatementGenerator:
 				"timestamp": trx.date_created,
 				"type": trx.transaction_type.capitalize(),
 				"narration": trx.description or "",
-				"reference": trx.reference,
+				"reference": trx.receipt_number,
 				"counterparty": trx.metadata.get("counterparty",
 				                                 "Mobile Money") if trx.metadata else "Mobile Money",
 				"paid_in": float(trx.amount) if trx.transaction_type.lower() == "topup" else 0.0,
@@ -70,7 +74,7 @@ class StatementGenerator:
 			transactions=trx_list,
 			customer_name=f"{contribution.creator.first_name} {contribution.creator.last_name}",
 			msisdn=contribution.creator.phone_number,
-			account_number=str(contribution.wallet_account.id),
+			account_number=str(wallet_account.account_number),
 			period_start=data.get("start_date", trx_list[0]["timestamp"] if trx_list else datetime.now()),
 			period_end=data.get("end_date", trx_list[-1]["timestamp"] if trx_list else datetime.now()),
 			opening_balance=Decimal("0.00"),
@@ -89,27 +93,10 @@ class StatementGenerator:
 	
 
 
+from django.urls import path
 
-from django.urls import path, include
-#
-# api_v1_patterns = [
-#     # Pledge Endpoints
-#     path('pledge/create/', billing_admin.create_pledge, name='create_pledge'),
-#     path('pledge/clear/', billing_admin.clear_pledge, name='clear_pledge'),
-#     # Billing Admin Endpoints
-#     path('wallet/balance/', billing_admin.wallet_balance, name='wallet_balance'),
-#     path('wallet/mobile-money-transfer/', billing_admin.mobile_money_transfer, name='mobile_money_transfer'),
-#     path('wallet/b2c-transfer/', billing_admin.b2c_transfer, name='b2c_transfer'),
-#     path('wallet/c2b-payment/', billing_admin.c2b_payment, name='c2b_payment'),
-#     path('wallet/query-mobile-money-transaction/', billing_admin.query_mobile_money_transaction,
-#          name='query_transaction'),
-#     # Callbacks
-#     path('callbacks/b2c/', billing_admin.b2c_transfer_callback_url, name='b2c_callback'),
-#     path('callbacks/c2b/', billing_admin.c2b_payment_callback_endpoint, name='c2b_callback'),
-# ]
-#
-# urlpatterns = [
-#     path('api/v1/', include(api_v1_patterns)),
-#     path('health/', health_check, name='health_check'),
-#     path('ready/', ready_check, name='ready_check'),
-# ]
+
+urlpatterns = [
+	path('generate/', StatementGenerator().generate_statement, name='generate'),
+
+]
