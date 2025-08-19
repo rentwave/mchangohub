@@ -193,6 +193,7 @@ class InterfaceBase(AuditManagementService):
 			charge,
 			receipt,
 			amount_plus_charge,
+			actioned_by=None,
 			**kwargs
 	) -> WalletTransaction:
 		"""Creates the transaction history for the interface transaction."""
@@ -202,10 +203,11 @@ class InterfaceBase(AuditManagementService):
 			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
 			if transaction_type == "CR":
 				transaction_history = account.initiate_topup(
-					amount=amount, reference=reference, description=description, charge=charge, receipt=receipt, amount_plus_charge=amount_plus_charge
+					amount=amount, reference=reference, description=description, charge=charge, receipt=receipt, amount_plus_charge=amount_plus_charge, actioned_by=actioned_by
 				)
 			else:
-				transaction_history = account.initiate_payment(amount=amount, reference=reference, description=description, charge=charge, receipt=receipt, amount_plus_charge=amount_plus_charge)
+				actioned_by = contribution.creator
+				transaction_history = account.initiate_payment(amount=amount, reference=reference, description=description, charge=charge, receipt=receipt, amount_plus_charge=amount_plus_charge, actioned_by=actioned_by)
 			if transaction_history is None:
 				raise Exception(
 					'%s Could not create a process for: %s' % (self.__class__.__name__, contribution)
@@ -224,7 +226,7 @@ class InterfaceBase(AuditManagementService):
 			if transaction_type == "CR":
 				account.topup_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description, receipt=receipt,)
 			else:
-				account.payment_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description, receipt=receipt,)
+				account.payment_approved(amount=transaction_obj.amount_plus_charge, reference=transaction_obj.reference, description=description, receipt=receipt,)
 			balance_logs = BalanceLogService().filter(transaction=transaction_obj)
 			balance_log_ids = list(balance_logs.values_list('id', flat=True))
 			if balance_log_ids:

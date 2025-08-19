@@ -25,6 +25,7 @@ import logging
 from billing.itergrations.pesaway import PesaWayAPIClient
 from billing.models import Pledge
 from contributions.backend.services import ContributionService
+from users.backend.services import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -412,8 +413,11 @@ class BillingAdmin(View):
                     ErrorCodes.TRANSACTION_FAILED,
                     "Payment could not be initiated"
                 )
+            actioned_by = UserService().filter(phone_number=data.get('phone_number')).first()
+            if not actioned_by:
+                actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=data.get('first_name', 'Anonymous'), last_name=data.get('last_name', 'Name'), is_active=True)
             receipt = response.data.get('TransactionID')
-            topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt}
+            topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt, 'actioned_by': actioned_by}
             topup_result = InitiateTopup().post(
                 contribution_id=data.get('contribution'), **topup_data
             )

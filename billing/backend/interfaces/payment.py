@@ -128,7 +128,7 @@ class InitiatePayment(InterfaceBase):
                 balance_entry_type = self._get_balance_entry_type()
                 if not balance_entry_type:
                     return self.ERROR_CODES['BALANCE_ENTRY_TYPE_NOT_FOUND']
-                description = f"Contribution Request to {contribution.name} by {phone_number}"
+                description = f"Contribution to {contribution.name} by {phone_number}"
                 detailed_description = f"{description} with ref {ref}"
                 try:
                     transaction_history = self.initiate_transaction(
@@ -281,10 +281,16 @@ class ApprovePaymentTransaction(InterfaceBase):
                 return validation_error
             try:
                 with trx.atomic():
-                    description = (
-                        f"Contribution approved for {account.contribution.name} "
-                        f"with reference {transaction_history.reference}"
-                    )
+                    if transaction_history.actioned_by:
+                        description = (
+                            f"Withdrawal approved for {account.contribution.name} "
+                            f"to {transaction_history.actioned_by.phone_number} with reference {transaction_history.receipt_number}"
+                        )
+                    else:
+                        description = (
+                            f"Withdrawal approved for {account.contribution.name} "
+                            f"with reference {transaction_history.receipt_number}"
+                        )
                     approved_transaction = self.approve_transaction(
                         transaction_id=transaction_history.id,
                         contribution=account.contribution,
