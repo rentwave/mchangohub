@@ -211,7 +211,6 @@ class ContributionManagementService:
             .values()
         )
 
-
         contribution_data = {
             **contribution_dict,
             "id": str(contribution.id),
