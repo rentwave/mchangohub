@@ -1,9 +1,13 @@
+from typing import Union
+
 from dateutil.parser import parse
+from django.db.models.functions import Concat, Trim, Coalesce
 from django.forms.models import model_to_dict
 from django.utils import timezone
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, F, Value
 from django.db import transaction
 
+from base.backend.service import WalletAccountService, WalletTransactionService
 from contributions.backend.services import ContributionService
 from contributions.models import Contribution
 from notifications.backend.notification_management_service import NotificationManagementService
@@ -134,30 +138,6 @@ class ContributionManagementService:
         return updated_contribution
 
     @staticmethod
-    def update_contribution_status(contribution_id: str) -> Contribution:
-        """
-        Update the status of a contribution based on its end_date relative to current time.
-
-        :param contribution_id: The UUID or string ID of the contribution.
-        :type contribution_id: str
-        :raises ValueError: If contribution is not found.
-        :return: The contribution instance with updated status.
-        :rtype: Contribution
-        """
-        contribution = ContributionService().get(id=contribution_id)
-        if contribution is None:
-            raise ValueError('Contribution not found')
-
-        now = timezone.now()
-        new_status = Contribution.Status.ONGOING if contribution.end_date > now else Contribution.Status.OVERDUE
-
-        if contribution.status != new_status:
-            contribution.status = new_status
-            contribution.save()
-
-        return contribution
-
-    @staticmethod
     def delete_contribution(user: User, contribution_id: str) -> Contribution:
         """
         Soft-delete a contribution by marking its status as INACTIVE.
@@ -181,7 +161,8 @@ class ContributionManagementService:
         contribution.save()
         return contribution
 
-    def get_contribution(self, contribution_id: str) -> dict:
+    @staticmethod
+    def get_contribution(contribution_id: str) -> dict:
         """
         Retrieve a contribution as a dictionary.
 
@@ -197,23 +178,59 @@ class ContributionManagementService:
         if contribution is None:
             raise ValueError('Contribution not found')
 
-        contribution = self.update_contribution_status(contribution_id)
+        # Update status
+        contribution.update_status()
 
+        # Convert contribution model instance to dict
         contribution_dict = model_to_dict(contribution)
-        contribution_dict["id"] = str(contribution.id)
-        contribution_dict["creator_name"] = contribution.creator.full_name
 
-        return contribution_dict
+        # Get wallet account
+        wallet_account = WalletAccountService().get(contribution=contribution)
+        available_wallet_amount = wallet_account.available_amount
 
+        # Get transactions
+        transactions = list(
+            WalletTransactionService()
+            .filter(
+                wallet_account=wallet_account,
+                transaction_type="topup",
+                status__name="Completed",
+            )
+            .annotate(
+                actioned_by_full_name=Trim(
+                    Concat(
+                        F("actioned_by__first_name"),
+                        Value(" "),
+                        Coalesce(F("actioned_by__other_name"), Value("")),
+                        Value(" "),
+                        F("actioned_by__last_name"),
+                    )
+                )
+            )
+            .order_by("-date_created")
+            .values()
+        )
+
+
+        contribution_data = {
+            **contribution_dict,
+            "id": str(contribution.id),
+            "creator_name": contribution.creator.full_name,
+            "available_wallet_amount": available_wallet_amount,
+            "transactions": transactions
+        }
+
+        return contribution_data
+
+    @staticmethod
     def filter_contributions(
-            self,
             search_term: str = "",
             creator_id: str | None = None,
             status: str | None = None,
             start_date: str | None = None,
             end_date: str | None = None,
             queryset: bool = False,
-    ) -> QuerySet | list[dict]:
+    ) -> Union[QuerySet, list[dict]]:
         """
         Filter and retrieve contributions based on search criteria.
 
@@ -261,7 +278,7 @@ class ContributionManagementService:
 
         # Update statuses of filtered contributions
         for contribution in contributions:
-            self.update_contribution_status(contribution.id)
+            contribution.update_status()
 
         if queryset:
             return contributions

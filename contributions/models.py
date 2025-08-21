@@ -83,7 +83,7 @@ class Contribution(GenericBaseModel):
             self.status = self.Status.OVERDUE
         else:
             self.status = self.Status.ONGOING
-        self.save(update_fields=["status", "date_updated"])
+        self.save(update_fields=["status", "date_modified"])
 
     def latest_transaction(self):
         """Get most recent transaction."""
