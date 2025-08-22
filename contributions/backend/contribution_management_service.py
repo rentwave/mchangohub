@@ -4,7 +4,6 @@ from typing import Union
 from dateutil.parser import parse
 from django.db.models.functions import Concat, Trim, Coalesce
 from django.forms.models import model_to_dict
-from django.utils import timezone
 from django.db.models import Q, QuerySet, F, Value
 from django.db import transaction
 
@@ -108,7 +107,7 @@ class ContributionManagementService:
                     "target_amount": contribution.target_amount,
                     "end_date": contribution.end_date.strftime("%Y-%m-%d"),
                     "creator_name": user.full_name,
-                    "contribution_link": f"https://mchangohub.com/contributions/{contribution.id}",
+                    "contribution_link": f"https://mchangohub.com/contributions/{contribution.alias}",
                 },
             )
 
