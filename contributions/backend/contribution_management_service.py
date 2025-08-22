@@ -2,7 +2,7 @@ import re
 from typing import Union
 
 from dateutil.parser import parse
-from django.db.models.functions import Concat, Trim, Coalesce
+from django.db.models.functions import ConcatWs, Trim, Replace, Concat, Coalesce
 from django.forms.models import model_to_dict
 from django.db.models import Q, QuerySet, F, Value
 from django.db import transaction
@@ -228,12 +228,16 @@ class ContributionManagementService:
             )
             .annotate(
                 actioned_by_full_name=Trim(
-                    Concat(
-                        F("actioned_by__first_name"),
+                    Replace(
+                        Concat(
+                            Coalesce(F("actioned_by__first_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("actioned_by__other_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("actioned_by__last_name"), Value("")),
+                        ),
+                        Value("  "),
                         Value(" "),
-                        Coalesce(F("actioned_by__other_name"), Value("")),
-                        Value(" "),
-                        F("actioned_by__last_name"),
                     )
                 )
             )
@@ -244,6 +248,8 @@ class ContributionManagementService:
         contribution_data = {
             **contribution_dict,
             "id": str(contribution.id),
+            "date_created": contribution.date_created,
+            "date_modified": contribution.date_modified,
             "creator_name": contribution.creator.full_name,
             "available_wallet_amount": available_wallet_amount,
             "transactions": transactions
