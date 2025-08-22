@@ -1,3 +1,4 @@
+import re
 from typing import Union
 
 from dateutil.parser import parse
@@ -19,6 +20,33 @@ from utils.common import normalize_phone_number
 class ContributionManagementService:
 
     REQUIRED_FIELDS = ['name', 'target_amount', 'end_date']
+
+    @staticmethod
+    def _generate_contribution_alias() -> str:
+        """
+        Generate a new contribution alias in the format ``G-XXXX``.
+
+        The alias is incremented based on the highest existing alias. If no
+        valid alias exists, the sequence starts from ``G-0001``.
+
+        :return: The newly generated contribution alias.
+        :rtype: str
+        :raises Exception: If database access fails while retrieving the last contribution.
+        """
+        last_contribution = (
+            Contribution.objects.select_for_update()
+            .exclude(alias__isnull=True)
+            .order_by("-alias")
+            .first()
+        )
+        if last_contribution and re.match(r"^G-\d{4}$", last_contribution.alias):
+            last_number = int(last_contribution.alias.split("-")[1])
+        else:
+            last_number = 0
+
+        alias = f"G-{last_number + 1:04d}"
+
+        return alias
 
     @transaction.atomic
     def create_contribution(self, user: User, **kwargs) -> Contribution:
@@ -54,7 +82,10 @@ class ContributionManagementService:
         if ContributionService().filter(creator=user, name=name).exists():
             raise ValueError("Contribution name already exists")
 
+        alias = self._generate_contribution_alias()
+
         contribution = ContributionService().create(
+            alias=alias,
             name=name,
             description=description,
             target_amount=target_amount,
