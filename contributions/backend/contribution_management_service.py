@@ -186,7 +186,7 @@ class ContributionManagementService:
 
         # Get wallet account
         wallet_account = WalletAccountService().get(contribution=contribution)
-        available_wallet_amount = wallet_account.available_amount
+        available_wallet_amount = wallet_account.available
 
         # Get transactions
         transactions = list(
