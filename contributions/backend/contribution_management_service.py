@@ -38,12 +38,12 @@ class ContributionManagementService:
             .order_by("-alias")
             .first()
         )
-        if last_contribution and re.match(r"^G-\d{4}$", last_contribution.alias):
+        if last_contribution and re.match(r"^C-\d{4}$", last_contribution.alias):
             last_number = int(last_contribution.alias.split("-")[1])
         else:
             last_number = 0
 
-        alias = f"G-{last_number + 1:04d}"
+        alias = f"C-{last_number + 1:04d}"
 
         return alias
 
