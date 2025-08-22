@@ -316,8 +316,9 @@ class BillingAdmin(View):
             data['amount'] = base_amount
             data['amount_plus_charge'] = total_amount
             payment_data = {**data, 'ref': reference, 'charge': charge}
+            contribution = ContributionService().get(alias=data.get('contribution'))
             payment = InitiatePayment().post(
-                contribution_id=data.get('contribution'), **payment_data
+                contribution_id=str(contribution.id), **payment_data
             )
             logger.info(f"B2C transfer processing completed: {request_id}")
             return self.create_success_response({
@@ -421,10 +422,11 @@ class BillingAdmin(View):
                 last_name = parts[1] if len(parts) > 1 else "User"
                 role = RoleService().get(name="USER")
                 actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=first_name, last_name=last_name, role=role)
+            contribution = ContributionService().get(alias=data.get('contribution'))
             receipt = response.data.get('TransactionID')
             topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt, 'actioned_by': actioned_by}
             topup_result = InitiateTopup().post(
-                contribution_id=data.get('contribution'), **topup_data
+                contribution_id=str(contribution.id), **topup_data
             )
             return self.create_success_response({
                 "transaction_reference": reference,
@@ -472,7 +474,7 @@ class BillingAdmin(View):
             pledger_name = data.get('full_name') or 'Anonymous'
             pledger_contact = data.get('phone_number') or 'Anonymous'
             purpose = data.get('purpose') or 'No purpose specified'
-            contribution = ContributionService().get(id=data.get('contribution'))
+            contribution = ContributionService().get(alias=data.get('contribution'))
             if not contribution:
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
