@@ -309,7 +309,26 @@ class ContributionManagementService:
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
 
-        contributions = ContributionService().filter(filters)
+        contributions = (
+            ContributionService()
+            .filter(filters)
+            .annotate(
+                available_wallet_amount=F("wallet_accounts__available"),
+                creator_name=Trim(
+                    Replace(
+                        Concat(
+                            Coalesce(F("creator__first_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("creator__other_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("creator__last_name"), Value("")),
+                        ),
+                        Value("  "),
+                        Value(" "),
+                    )
+                )
+            )
+        )
 
         # Update statuses of filtered contributions
         for contribution in contributions:
