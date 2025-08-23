@@ -46,32 +46,46 @@ class TransactionStatus:
 
 
 CHARGE_TIERS = [
-    (0, 1000, Decimal('0.005')),  # 0.5%
-    (1001, 10000, Decimal('0.01')),  # 1%
-    (10001, 100000, Decimal('0.015')),  # 1.5%
-    (100001, 500000, Decimal('0.02')),  # 2%
-    (500001, 1000000, Decimal('0.025')),  # 2.5%
-    (1000001, 5000000, Decimal('0.03')),  # 3%
-    (5000001, 10000000, Decimal('0.04')),  # 4%
+    (10000, 20000, Decimal('0.031')),  # 3.1% for 10,001 - 20,000
+    (20000, 30000, Decimal('0.032')),  # 3.2% for 20,001 - 30,000
+    (30000, 40000, Decimal('0.033')),  # 3.3% for 30,001 - 40,000
+    (40000, 50000, Decimal('0.034')),  # 3.4% for 40,001 - 50,000
+    (50000, 60000, Decimal('0.035')),  # 3.5% for 50,001 - 60,000
+    (60000, 70000, Decimal('0.036')),  # 3.6% for 60,001 - 70,000
+    (70000, 80000, Decimal('0.037')),  # 3.7% for 70,001 - 80,000
+    (80000, 90000, Decimal('0.038')),  # 3.8% for 80,001 - 90,000
+    (90000, 100000, Decimal('0.039')),  # 3.9% for 90,001 - 100,000
+    (100000, 110000, Decimal('0.04')),  # 4% for 100,001 - 110,000
+    (110000, 120000, Decimal('0.041')),  # 4.1% for 110,001 - 120,000
+    (120000, 130000, Decimal('0.042')),  # 4.2% for 120,001 - 130,000
+    (130000, 140000, Decimal('0.043')),  # 4.3% for 130,001 - 140,000
+    (140000, 150000, Decimal('0.044')),  # 4.4% for 140,001 - 150,000
+    (150000, 250000, Decimal('0.045')),  # 4.5% for 150,001 - 250,000
 ]
 
 
 def calculate_fair_tiered_charge(amount_kes: float) -> float:
-    """Calculate charge with decimal precision"""
+    """Calculate charge with decimal precision and show breakdown"""
     amount = Decimal(str(amount_kes))
-
-    if amount > 10000000:
-        charge = float((amount * Decimal('0.05')).quantize(Decimal('0.01'), rounding=ROUND_UP))
+    charge_decimal = Decimal('0.0')
+    breakdown = []
+    if amount <= 10000:
+        charge = (amount * Decimal('0.03')).quantize(Decimal('0.01'), rounding=ROUND_UP)
+        breakdown.append(f"0 - 10,000 KES: 3% charge = {charge} KES")
     else:
-        charge_decimal = Decimal('0.0')
+        charge_decimal += Decimal('10000') * Decimal('0.03')
+        breakdown.append(f"0 - 10,000 KES: 3% charge = {charge_decimal} KES")
         for lower, upper, rate in CHARGE_TIERS:
             if amount > lower:
                 applicable_amount = min(amount, Decimal(str(upper))) - Decimal(str(lower))
-                charge_decimal += applicable_amount * rate
+                tier_charge = applicable_amount * rate
+                charge_decimal += tier_charge
+                breakdown.append(f"{lower + 1:,} - {upper:,} KES: {rate * 100}% charge = {tier_charge:.2f} KES")
+
         charge = float(charge_decimal.quantize(Decimal('0.01'), rounding=ROUND_UP))
-
+    breakdown.append(f"Total Charge: {charge} KES")
+    print(breakdown)
     return charge
-
 
 def rate_limit(requests_per_minute: int = 1000):
     """Simple rate limiting decorator"""
