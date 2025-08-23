@@ -222,5 +222,5 @@ CIRCUIT_BREAKER_TIMEOUT = int(os.getenv('CIRCUIT_BREAKER_TIMEOUT', 60))
 PESAWAY_CLIENT_SECRET = "S9zRS9Q3f7DBkC7I"
 PESAWAY_CLIENT_ID = "4yN4wTqhNDRRKY6oMksGVbTa9Q8xP0px"
 PESAWAY_BASE_URL = "https://api.sandbox.pesaway.com"
-PESAWAY_B2C_CALLBACK = "https://tree-worlds-forums-manufacturing.trycloudflare.com/api/billing/api/v1/callbacks/b2c/"
-PESAWAY_C2B_CALLBACK = "https://tree-worlds-forums-manufacturing.trycloudflare.com/api/billing/api/v1/callbacks/c2b/"
+PESAWAY_B2C_CALLBACK = "https://zentu.rentwaveafrica.co.ke/api/billing/api/v1/callbacks/b2c/"
+PESAWAY_C2B_CALLBACK = "https://zentu.rentwaveafrica.co.ke/api/billing/api/v1/callbacks/c2b/"
