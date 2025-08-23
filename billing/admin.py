@@ -4,8 +4,9 @@ from datetime import timedelta, datetime
 from decimal import Decimal
 
 from django.contrib import admin
-from django.db.models import Sum, Count, Avg, Q
-from django.db.models.functions import TruncMonth
+from django.db.models import Sum, Count, Avg, Q, ExpressionWrapper, Value, FloatField
+from django.db.models.functions import TruncMonth, TruncDay
+from django.forms import DecimalField
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
@@ -1158,7 +1159,10 @@ class RevenueLogAdmin(admin.ModelAdmin, RevenueAdminMixin):
             .annotate(
                 monthly_revenue=Sum("amount"),
                 monthly_count=Count("id"),
-                avg_daily_revenue=Sum("amount") / 30.0
+                avg_daily_revenue=ExpressionWrapper(
+                    Sum("amount") / Count(TruncDay("date_created"), distinct=True),
+                    output_field=FloatField(),
+                ),
             )
             .order_by("-month")[:6]
         )
