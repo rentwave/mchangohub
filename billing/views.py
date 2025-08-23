@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_UP
 from typing import Dict, Any, Optional
 from functools import wraps
 
+from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -15,7 +16,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
-from base.backend.service import StateService
+from base.backend.service import StateService, WalletAccountService
 from billing.backend.interfaces.topup import InitiateTopup, ApproveTopupTransaction
 from billing.backend.interfaces.payment import InitiatePayment, ApprovePaymentTransaction
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
@@ -279,6 +280,14 @@ class BillingAdmin(View):
             data = self.unpack_request_data(request)
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
+            contribution = ContributionService().get(alias=data.get('contribution'))
+            wallet = WalletAccountService().get(contribution=contribution)
+            if not wallet or wallet.available < Decimal(data.get('amount', 0)):
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Insufficient Funds",
+                    status=400
+                )
             try:
                 base_amount = float(data.get('amount'))
                 if base_amount <= 0:
@@ -316,7 +325,6 @@ class BillingAdmin(View):
             data['amount'] = base_amount
             data['amount_plus_charge'] = total_amount
             payment_data = {**data, 'ref': reference, 'charge': charge}
-            contribution = ContributionService().get(alias=data.get('contribution'))
             payment = InitiatePayment().post(
                 contribution_id=str(contribution.id), **payment_data
             )
@@ -395,6 +403,13 @@ class BillingAdmin(View):
         try:
             data = self.unpack_request_data(request)
             print(data)
+            contribution = ContributionService().get(~Q(status="INACTIVE"),alias=data.get('contribution'))
+            if not contribution:
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Contribution is expired or not found",
+                    status=404
+                )
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
             base_amount = float(data.pop('amount'))
@@ -421,7 +436,6 @@ class BillingAdmin(View):
                 last_name = parts[1] if len(parts) > 1 else "User"
                 role = RoleService().get(name="USER")
                 actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=first_name, last_name=last_name, role=role)
-            contribution = ContributionService().get(alias=data.get('contribution'))
             amount_minus_charge = base_amount - charge
             receipt = response.data.get('TransactionID')
             topup_data = {**data, 'ref': reference, 'charge': charge, "amount": amount_minus_charge, "amount_plus_charge": base_amount,'receipt': receipt, 'actioned_by': actioned_by}
