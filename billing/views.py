@@ -287,7 +287,7 @@ class BillingAdmin(View):
                         "Amount must be greater than zero",
                         status=400
                     )
-                charge = calculate_fair_tiered_charge(base_amount)
+                charge = 0
                 total_amount = base_amount + charge
             except (ValueError, TypeError):
                 return self.create_error_response(
@@ -397,13 +397,12 @@ class BillingAdmin(View):
             print(data)
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
-            base_amount = float(data.get('amount'))
+            base_amount = float(data.pop('amount'))
             charge = calculate_fair_tiered_charge(base_amount)
-            total_amount = base_amount + charge
             logger.info(f"C2B payment initiated: {request_id} - {reference}")
             response = self.client.receive_c2b_payment(
                 external_reference=reference,
-                amount=total_amount,
+                amount=base_amount,
                 phone_number=data.get('phone_number'),
                 reason=f"Contribution on {timezone.now()}",
                 results_url=settings.PESAWAY_C2B_CALLBACK
@@ -423,8 +422,9 @@ class BillingAdmin(View):
                 role = RoleService().get(name="USER")
                 actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=first_name, last_name=last_name, role=role)
             contribution = ContributionService().get(alias=data.get('contribution'))
+            amount_minus_charge = base_amount - charge
             receipt = response.data.get('TransactionID')
-            topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt, 'actioned_by': actioned_by}
+            topup_data = {**data, 'ref': reference, 'charge': charge, "amount": amount_minus_charge, "amount_plus_charge": base_amount,'receipt': receipt, 'actioned_by': actioned_by}
             topup_result = InitiateTopup().post(
                 contribution_id=str(contribution.id), **topup_data
             )
@@ -432,7 +432,7 @@ class BillingAdmin(View):
                 "transaction_reference": reference,
                 "amount": base_amount,
                 "charge": charge,
-                "total_amount": total_amount,
+                "amount_minus_charge": amount_minus_charge,
                 "status": "PENDING",
                 **topup_result
             })

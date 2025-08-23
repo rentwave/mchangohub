@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} | Django Administration</title>
+    <link rel="stylesheet" href="{% load static %}{% static "admin/css/base.css" %}">
+    <link rel="stylesheet" href="{% load static %}{% static "admin/css/changelists.css" %}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            background-color: #0f1419;
+            color: #c9d1d9;
+        }
+        #container {
+            background-color: #0f1419;
+        }
+        #header {
+            background-color: #21262d;
+            border-bottom: 1px solid #30363d;
+        }
+        #branding h1 a {
+            color: #f0f6fc;
+        }
+        .analytics-header {
+            background-color: #161b22;
+            color: #c9d1d9;
+            padding: 20px;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .analytics-card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 20px;
+        }
+        .analytics-card h3 {
+            margin-top: 0;
+            color: #f0f6fc;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 10px;
+            font-weight: 600;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #30363d;
+        }
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+        .stat-label {
+            font-weight: 500;
+            color: #8b949e;
+        }
+        .stat-value {
+            font-weight: 600;
+            color: #c9d1d9;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 20px 0;
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 20px;
+        }
+        .chart-full-width {
+            grid-column: 1 / -1;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        .analytics-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #161b22;
+            color: #c9d1d9;
+        }
+        .analytics-table th,
+        .analytics-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #30363d;
+        }
+        .analytics-table th {
+            background-color: #21262d;
+            font-weight: 600;
+            color: #f0f6fc;
+        }
+        .analytics-table tr {
+            background-color: #21262d;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-pending {
+            background-color: #fb8500;
+            color: #000;
+        }
+        .status-realized {
+            background-color: #238636;
+            color: #fff;
+        }
+        .status-unrealized {
+            background-color: #da3633;
+            color: #fff;
+        }
+        .status-unknown {
+            background-color: #656d76;
+            color: #fff;
+        }
+        .breadcrumbs {
+            margin-bottom: 20px;
+            color: #8b949e;
+        }
+        .breadcrumbs a {
+            color: #58a6ff;
+            text-decoration: none;
+        }
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+            color: #79c0ff;
+        }
+        .action-buttons {
+            margin: 20px 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            margin-right: 10px;
+            background-color: #2ea043;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #2ea043;
+        }
+        .btn-secondary {
+            background-color: #30363d;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+        }
+        .btn-secondary:hover {
+            background-color: #30363d;
+            border-color: #484f58;
+        }
+        #content {
+            background-color: #0f1419;
+        }
+    </style>
+</head>
+<body>
+    {% load static %}
+    <div id="container">
+        <div id="header">
+            <div id="branding">
+                <h1 id="site-name">
+                    <a href="{% url 'admin:index' %}">Django administration</a>
+                </h1>
+            </div>
+        </div>
+
+        <div class="breadcrumbs">
+            <a href="{% url 'admin:index' %}">Home</a>
+            &rsaquo; <a href="{% url 'admin:billing_revenuelog_changelist' %}">Revenue logs</a>
+            &rsaquo; {{ title }}
+        </div>
+
+        <div id="content" class="flex">
+            <div class="analytics-header">
+                <h1>{{ title }}</h1>
+                <p>{{ subtitle }}</p>
+            </div>
+
+            <div class="action-buttons">
+                <a href="{% url 'admin:billing_revenuelog_changelist' %}" class="btn">← Back to Revenue Logs</a>
+                <a href="{% url 'admin:revenue_detailed_breakdown' %}" class="btn btn-secondary">Detailed Breakdown</a>
+<!--                <a href="{% url 'admin:revenue_export_analytics' %}" class="btn btn-secondary">Export CSV</a>-->
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <h3><i class="fas fa-chart-line"></i> Revenue Overview</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Revenue:</span>
+                        <span class="stat-value">KES {{ analytics.total_revenue|floatformat:2|default:"0.00" }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Average Revenue:</span>
+                        <span class="stat-value">KES {{ analytics.avg_revenue|floatformat:2|default:"0.00" }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Highest Transaction:</span>
+                        <span class="stat-value">KES {{ analytics.max_revenue|floatformat:2|default:"0.00" }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Lowest Transaction:</span>
+                        <span class="stat-value">KES {{ analytics.min_revenue|floatformat:2|default:"0.00" }}</span>
+                    </div>
+                </div>
+
+                <div class="analytics-card">
+                    <h3><i class="fas fa-exchange-alt"></i> Transaction Breakdown</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Transactions:</span>
+                        <span class="stat-value">{{ analytics.total_count|default:"0" }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">TopUp Charges:</span>
+                        <span class="stat-value">{{ analytics.topup_count|default:"0" }} (KES {{ analytics.topup_revenue|floatformat:2|default:"0.00" }})</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Withdrawal Charges:</span>
+                        <span class="stat-value">{{ analytics.withdrawal_count|default:"0" }} (KES {{ analytics.withdrawal_revenue|floatformat:2|default:"0.00" }})</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Adjustments:</span>
+                        <span class="stat-value">{{ analytics.adjustment_count|default:"0" }} (KES {{ analytics.adjustment_revenue|floatformat:2|default:"0.00" }})</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Section -->
+            <div class="analytics-card chart-full-width">
+                <h3><i class="fas fa-chart-line"></i> Daily Revenue Trend (Last 7 Days)</h3>
+                <div class="chart-container">
+                    <canvas id="dailyTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Status Breakdown Table -->
+            <div class="analytics-card">
+                <h3><i class="fas fa-tasks"></i> Status Breakdown</h3>
+                <div class="table-container">
+                    <table class="analytics-table">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Count</th>
+                                <th>Revenue</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for status in status_breakdown %}
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-{{ status.status|lower }}">
+                                        {{ status.status }}
+                                    </span>
+                                </td>
+                                <td>{{ status.count|floatformat:0 }}</td>
+                                <td>KES {{ status.amount|floatformat:2 }}</td>
+                                <td>{{ status.percentage|floatformat:1 }}%</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4">No data available</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="analytics-card">
+                <h3><i class="fas fa-users"></i> Top Revenue Accounts</h3>
+                <div class="table-container">
+                    <table class="analytics-table">
+                        <thead>
+                            <tr>
+                                <th>Account Number</th>
+                                <th>Contribution</th>
+                                <th>Total Revenue</th>
+                                <th>Transactions</th>
+                                <th>Avg Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for account in top_accounts %}
+                            <tr>
+                                <td>{{ account.wallet_account__account_number }}</td>
+                                <td>{{ account.wallet_account__contribution__name|default:"N/A" }}</td>
+                                <td>KES {{ account.total_revenue|floatformat:2 }}</td>
+                                <td>{{ account.transaction_count }}</td>
+                                <td>KES {{ account.avg_revenue|floatformat:2 }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5">No data available</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Chart.js configuration for dark theme
+        Chart.defaults.color = '#c9d1d9';
+        Chart.defaults.borderColor = '#30363d';
+        Chart.defaults.backgroundColor = 'rgba(88, 166, 255, 0.1)';
+
+        // Daily Revenue Trend Chart with error handling
+        const dailyCtx = document.getElementById('dailyTrendChart').getContext('2d');
+
+        // Safely parse chart data with fallback
+        let chartData;
+        try {
+            chartData = {{ chart_data|safe|default:"null" }};
+        } catch (e) {
+            console.error('Error parsing chart data:', e);
+            chartData = null;
+        }
+
+        // Fallback data if chart_data is not available or invalid
+        if (!chartData || !chartData.daily_trend) {
+            chartData = {
+                daily_trend: [
+                    { date: new Date().toISOString().split('T')[0], revenue: 0 }
+                ]
+            };
+        }
+
+        new Chart(dailyCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.daily_trend.map(item => {
+                    const date = new Date(item.date);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }),
+                datasets: [{
+                    label: 'Daily Revenue (KES)',
+                    data: chartData.daily_trend.map(item => item.revenue || 0),
+                    borderColor: '#58a6ff',
+                    backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#58a6ff',
+                    pointBorderColor: '#1f6feb',
+                    pointBorderWidth: 2,
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#c9d1d9',
+                            font: {
+                                size: 14
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: '#8b949e',
+                            callback: function(value) {
+                                return 'KES ' + value.toLocaleString();
+                            }
+                        },
+                        grid: {
+                            color: '#30363d'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            color: '#8b949e'
+                        },
+                        grid: {
+                            color: '#30363d'
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                elements: {
+                    point: {
+                        hoverRadius: 6
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
