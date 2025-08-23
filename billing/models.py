@@ -452,8 +452,8 @@ class WalletAccount(BaseModel):
                 transaction_obj=transaction_obj,
                 revenue_type=RevenueType.TOPUP_CHARGE,
                 amount=charge,
-                original_amount=amount,
-                description=f'TopUp charge for {amount}',
+                original_amount=amount_plus_charge,
+                description=f'TopUp charge for {amount_plus_charge}',
                 metadata={
                     'status': 'pending',
                     'mpesa_reference': receipt,
