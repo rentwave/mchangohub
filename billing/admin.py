@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.contrib import admin
 from django.db.models import Sum, Count, Avg, Q
+from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
@@ -1150,17 +1151,18 @@ class RevenueLogAdmin(admin.ModelAdmin, RevenueAdminMixin):
 
         total_records = queryset.count()
 
-        # Monthly breakdown
-        monthly_data = queryset.extra(
-            select={
-                'month': "strftime('%%Y-%%m', date_created)" if connection.vendor == 'sqlite' else "DATE_FORMAT(date_created, '%%Y-%%m')"}
-        ).values('month').annotate(
-            monthly_revenue=Sum('amount'),
-            monthly_count=Count('id'),
-            avg_daily_revenue=Sum('amount') / 30  # Approximate
-        ).order_by('-month')[:6]
+        monthly_data = (
+            queryset
+            .annotate(month=TruncMonth("date_created"))
+            .values("month")
+            .annotate(
+                monthly_revenue=Sum("amount"),
+                monthly_count=Count("id"),
+                avg_daily_revenue=Sum("amount") / 30.0
+            )
+            .order_by("-month")[:6]
+        )
 
-        # Revenue type detailed breakdown
         type_breakdown = queryset.values('revenue_type').annotate(
             type_revenue=Sum('amount'),
             type_count=Count('id'),
@@ -1169,7 +1171,6 @@ class RevenueLogAdmin(admin.ModelAdmin, RevenueAdminMixin):
             min_amount=Min('amount')
         ).order_by('-type_revenue')
 
-        # Account performance
         account_performance = queryset.values(
             'wallet_account__account_number',
             'wallet_account__contribution__name'
@@ -1180,7 +1181,6 @@ class RevenueLogAdmin(admin.ModelAdmin, RevenueAdminMixin):
             last_transaction=Max('date_created')
         ).order_by('-total_revenue')[:20]
 
-        # Daily performance for the last 30 days
         thirty_days_ago = timezone.now().date() - timedelta(days=30)
         daily_performance = queryset.filter(
             date_created__date__gte=thirty_days_ago
