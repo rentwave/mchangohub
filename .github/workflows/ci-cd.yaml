@@ -119,6 +119,11 @@ jobs:
             
             echo "=== System Health Check ==="
             
+            # Check server architecture
+            echo "Server architecture:"
+            uname -m
+            arch
+            
             # Check system resources
             echo "Available disk space:"
             df -h /srv/apps/live/mchangohub
@@ -128,6 +133,7 @@ jobs:
             
             echo "Docker system info:"
             docker --version
+            docker info --format "{{.Architecture}}" || echo "Could not get Docker architecture"
             docker system df || echo "Docker system df failed"
             
             # Verify directory structure
