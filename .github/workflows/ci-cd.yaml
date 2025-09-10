@@ -115,10 +115,10 @@ jobs:
       - name: Clean Docker cache on server
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.MCHANGOHUB_SERVER_IP }}
-          username: ${{ secrets.MCHANGOHUB_SSH_USER }}
+          host: ${{ secrets.MVPM_SERVER_IP }}
+          username: ${{ secrets.MVPM_SSH_USER }}
           port: 22
-          key: ${{ secrets.MCHANGOHUB_SSH_KEY }}
+          key: ${{ secrets.MVPM_PASSWORD_SSH_KEY }}
           timeout: 120s
           script: |
             set -euo pipefail
