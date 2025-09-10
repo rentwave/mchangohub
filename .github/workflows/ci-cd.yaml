@@ -1,176 +1,109 @@
 name: Deploy Mchangohub to Master
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - master
 
-concurrency:
-  group: '${{ github.workflow }}-${{ github.ref }}'
-  cancel-in-progress: true
-
-env:
-  REGISTRY: docker.io
-  IMAGE_NAME: osiru/mchangohub
-
 jobs:
   pre-build:
-    name: Build and Push Docker Image
+    name: Pre-Build Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    outputs:
-      docker_tag: ${{ steps.set-docker-tag.outputs.docker_tag }}
-      image_digest: ${{ steps.build.outputs.digest }}
     steps:
-      - name: Check out code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set Docker Tag
-        id: set-docker-tag
+      - name: Validate Dockerfile
         run: |
-          GIT_HASH=$(git rev-parse --short "${GITHUB_SHA}")
-          DOCKER_TAG="master-${GIT_HASH}-$(date +%s)"
-          echo "docker_tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
-          echo "Building with tag: ${DOCKER_TAG}"
+          echo "🔍 Validating Dockerfile..."
+          docker run --rm -i hadolint/hadolint < Dockerfile || true
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=${{ steps.set-docker-tag.outputs.docker_tag }}
-
-      - name: Build and Push Docker Image
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ steps.set-docker-tag.outputs.docker_tag }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-          ulimit: |
-            nofile=65536:65536
-          shm-size: 2g
-
-  verify:
-    name: Verify Server Setup
+  build:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: pre-build
     steps:
-      - name: Verify environment on server
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
         with:
-          host: ${{ secrets.MCHANGOHUB_SERVER_IP }}
-          username: ${{ secrets.MCHANGOHUB_SSH_USER }}
-          port: 22
-          key: ${{ secrets.MCHANGOHUB_SSH_KEY }}
-          timeout: 300s
-          script: |
-            set -euo pipefail
-            echo "🔍 Checking server setup..."
-            cd /srv/apps/live/mchangohub/ || exit 1
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-            # check docker
-            if ! command -v docker &>/dev/null; then
-              echo "❌ Docker is not installed"
-              exit 1
-            fi
+      - name: Extract git commit hash
+        id: vars
+        run: echo "BACKEND_TAG=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
-            # check docker-compose (warn only if missing compose file)
-            if ! command -v docker compose &>/dev/null; then
-              echo "❌ Docker Compose is not installed"
-              exit 1
-            fi
-
-            if [[ ! -f docker-compose.yml ]]; then
-              echo "⚠️ Warning: docker-compose.yml not found, skipping file check"
-            else
-              echo "✅ docker-compose.yml found"
-            fi
-
-            echo "✅ Server verification passed"
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: osiru/mchangohub:${{ env.BACKEND_TAG }}
 
   deploy:
     name: Deploy to Master Server
-    needs: [pre-build, verify]
+    needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: production
     steps:
-      - name: Deploy via SSH
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy Mchangohub Master
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.MCHANGOHUB_SERVER_IP }}
           username: ${{ secrets.MCHANGOHUB_SSH_USER }}
           port: 22
           key: ${{ secrets.MCHANGOHUB_SSH_KEY }}
-          timeout: 600s
+          timeout: 120s
           script: |
             set -euo pipefail
-            echo "🚀 Starting deployment..."
-            cd /srv/apps/live/mchangohub/ || exit 1
 
-            git fetch origin master
-            git reset --hard origin/master
+            echo "=== System Health Check ==="
 
-            LATEST_TAG="${{ needs.pre-build.outputs.docker_tag }}"
-            echo "Using Docker tag: ${LATEST_TAG}"
+            echo "Server architecture:"
+            uname -m
+            arch
 
-            # backup and write new env
-            if [[ -f .env ]]; then
-              cp .env .env.backup.$(date +%s)
-            fi
-            {
-              echo "BACKEND_TAG=${LATEST_TAG}"
-              echo "DEPLOY_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "GIT_COMMIT=${{ github.sha }}"
-            } > .env
+            echo "Available disk space:"
+            df -h /srv/apps/live/mchangohub
 
-            docker pull osiru/mchangohub:${LATEST_TAG}
+            echo "Available memory:"
+            free -h
 
-            echo "Stopping current services..."
-            docker compose down --remove-orphans || true
+            echo "Docker system info:"
+            docker --version
+            docker info --format "{{.Architecture}}" || echo "Could not get Docker architecture"
 
-            echo "Starting services..."
-            docker compose pull --ignore-pull-failures
-            docker compose up -d --force-recreate --remove-orphans
+            echo "=== Deploying Mchangohub to Master ==="
+            cd /srv/apps/live/mchangohub
+            git reset --hard
+            git clean -fd
+            git pull origin master
 
-            sleep 10
-            docker compose ps
-            if docker compose ps --services --filter "status=running" | grep -q .; then
-              echo "✅ Deployment successful!"
-            else
-              echo "❌ Deployment failed"
-              docker compose logs --tail=50
-              exit 1
-            fi
+            echo "Updating .env file..."
+            echo "BACKEND_TAG=${{ env.BACKEND_TAG }}" > .env
+
+            echo "Pulling latest Docker image..."
+            docker compose pull || true
+
+            echo "Rebuilding containers..."
+            docker compose up -d --build
+
+            echo "Pruning unused images..."
+            docker image prune -f
+
+            echo "Restarting containers..."
+            docker compose down
+            docker compose up -d
+
+            echo "Deployment completed successfully ✅"
 
   clean:
     name: Clean Docker Cache
@@ -190,14 +123,15 @@ jobs:
           script: |
             set -euo pipefail
             echo "🧹 Cleaning up Docker..."
+
+            # Keep only the 3 most recent mchangohub images
             docker images osiru/mchangohub --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}" | \
               tail -n +2 | sort -k2 -r | tail -n +4 | awk '{print $1}' | \
               xargs -r docker rmi || true
-            docker image prune -f --filter "until=24h"
-            docker builder prune -f --keep-storage=1GB
-            docker system prune -f --volumes --filter "until=24h"
-            echo "✅ Docker cleanup complete"
 
-  notify:
-    name: Deployment Notification
-    ne
+            docker image prune -f
+            docker builder prune -f
+            docker system prune -f
+            docker volume prune -f
+
+            echo "✅ Docker cleanup complete"
