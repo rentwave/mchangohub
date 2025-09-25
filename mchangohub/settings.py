@@ -218,9 +218,11 @@ PESAWAY_REQUEST_TIMEOUT = int(os.getenv('PESAWAY_REQUEST_TIMEOUT', 30))
 
 CIRCUIT_BREAKER_FAILURE_THRESHOLD = int(os.getenv('CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5))
 CIRCUIT_BREAKER_TIMEOUT = int(os.getenv('CIRCUIT_BREAKER_TIMEOUT', 60))
+#
 
-PESAWAY_CLIENT_SECRET = "S9zRS9Q3f7DBkC7I"
-PESAWAY_CLIENT_ID = "4yN4wTqhNDRRKY6oMksGVbTa9Q8xP0px"
-PESAWAY_BASE_URL = "https://api.sandbox.pesaway.com"
-PESAWAY_B2C_CALLBACK = "https://zentu.rentwaveafrica.co.ke/api/billing/api/v1/callbacks/b2c/"
-PESAWAY_C2B_CALLBACK = "https://zentu.rentwaveafrica.co.ke/api/billing/api/v1/callbacks/c2b/"
+PESAWAY_CALLBACK_SIGNATURE_KEY = os.environ.get("PESAWAY_CALLBACK_SIGNATURE_KEY", "FUy9106[8XLLF+5732_00u2YC:Y_V2dX")
+PESAWAY_CLIENT_SECRET = os.environ.get("PESAWAY_CLIENT_SECRET", "KX!?y#MHg6Y67J!jh[z73J8+pPc6{fyn")
+PESAWAY_CLIENT_ID = os.environ.get("PESAWAY_CLIENT_ID", "j05u011Z?{@{G7u5")
+PESAWAY_BASE_URL = os.environ.get("PESAWAY_BASE_URL", "https://api.pesaway.com")
+PESAWAY_B2C_CALLBACK = os.environ.get("PESAWAY_B2C_CALLBACK", "https://zentu.rentwaveafrica.co.ke/api/billing/api/v1/callbacks/b2c/")
+PESAWAY_C2B_CALLBACK = os.environ.get("PESAWAY_C2B_CALLBACK", "https://zentu.rentwaveafrica.co.ke/api/billing/api/v1/callbacks/c2b/")
