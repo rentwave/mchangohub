@@ -37,6 +37,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+
       - name: Extract git commit hash
         id: vars
         run: |
@@ -88,6 +89,7 @@ jobs:
             git clean -fd
             git pull origin master
 
+
             LATEST_TAG="${{ needs.build.outputs.backend_tag }}"
             echo "Using Docker tag: $LATEST_TAG"
 
@@ -123,6 +125,7 @@ jobs:
           key: ${{ secrets.MVPM_PASSWORD_SSH_KEY }}
           timeout: 120s
           script: |
+
             set -euo pipefail
             echo "🧹 Cleaning up Docker..."
 
