@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_UP
 from typing import Dict, Any, Optional
 from functools import wraps
 
+from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -15,7 +16,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
-from base.backend.service import StateService
+from base.backend.service import StateService, WalletAccountService
 from billing.backend.interfaces.topup import InitiateTopup, ApproveTopupTransaction
 from billing.backend.interfaces.payment import InitiatePayment, ApprovePaymentTransaction
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
@@ -45,32 +46,46 @@ class TransactionStatus:
 
 
 CHARGE_TIERS = [
-    (0, 1000, Decimal('0.005')),  # 0.5%
-    (1001, 10000, Decimal('0.01')),  # 1%
-    (10001, 100000, Decimal('0.015')),  # 1.5%
-    (100001, 500000, Decimal('0.02')),  # 2%
-    (500001, 1000000, Decimal('0.025')),  # 2.5%
-    (1000001, 5000000, Decimal('0.03')),  # 3%
-    (5000001, 10000000, Decimal('0.04')),  # 4%
+    (10000, 20000, Decimal('0.031')),  # 3.1% for 10,001 - 20,000
+    (20000, 30000, Decimal('0.032')),  # 3.2% for 20,001 - 30,000
+    (30000, 40000, Decimal('0.033')),  # 3.3% for 30,001 - 40,000
+    (40000, 50000, Decimal('0.034')),  # 3.4% for 40,001 - 50,000
+    (50000, 60000, Decimal('0.035')),  # 3.5% for 50,001 - 60,000
+    (60000, 70000, Decimal('0.036')),  # 3.6% for 60,001 - 70,000
+    (70000, 80000, Decimal('0.037')),  # 3.7% for 70,001 - 80,000
+    (80000, 90000, Decimal('0.038')),  # 3.8% for 80,001 - 90,000
+    (90000, 100000, Decimal('0.039')),  # 3.9% for 90,001 - 100,000
+    (100000, 110000, Decimal('0.04')),  # 4% for 100,001 - 110,000
+    (110000, 120000, Decimal('0.041')),  # 4.1% for 110,001 - 120,000
+    (120000, 130000, Decimal('0.042')),  # 4.2% for 120,001 - 130,000
+    (130000, 140000, Decimal('0.043')),  # 4.3% for 130,001 - 140,000
+    (140000, 150000, Decimal('0.044')),  # 4.4% for 140,001 - 150,000
+    (150000, 250000, Decimal('0.045')),  # 4.5% for 150,001 - 250,000
 ]
 
 
 def calculate_fair_tiered_charge(amount_kes: float) -> float:
-    """Calculate charge with decimal precision"""
+    """Calculate charge with decimal precision and show breakdown"""
     amount = Decimal(str(amount_kes))
-
-    if amount > 10000000:
-        charge = float((amount * Decimal('0.05')).quantize(Decimal('0.01'), rounding=ROUND_UP))
+    charge_decimal = Decimal('0.0')
+    breakdown = []
+    if amount <= 10000:
+        charge = (amount * Decimal('0.03')).quantize(Decimal('0.01'), rounding=ROUND_UP)
+        breakdown.append(f"0 - 10,000 KES: 3% charge = {charge} KES")
     else:
-        charge_decimal = Decimal('0.0')
+        charge_decimal += Decimal('10000') * Decimal('0.03')
+        breakdown.append(f"0 - 10,000 KES: 3% charge = {charge_decimal} KES")
         for lower, upper, rate in CHARGE_TIERS:
             if amount > lower:
                 applicable_amount = min(amount, Decimal(str(upper))) - Decimal(str(lower))
-                charge_decimal += applicable_amount * rate
+                tier_charge = applicable_amount * rate
+                charge_decimal += tier_charge
+                breakdown.append(f"{lower + 1:,} - {upper:,} KES: {rate * 100}% charge = {tier_charge:.2f} KES")
+
         charge = float(charge_decimal.quantize(Decimal('0.01'), rounding=ROUND_UP))
-
+    breakdown.append(f"Total Charge: {charge} KES")
+    print(breakdown)
     return charge
-
 
 def rate_limit(requests_per_minute: int = 1000):
     """Simple rate limiting decorator"""
@@ -279,6 +294,14 @@ class BillingAdmin(View):
             data = self.unpack_request_data(request)
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
+            contribution = ContributionService().get(alias=data.get('contribution'))
+            wallet = WalletAccountService().get(contribution=contribution)
+            if not wallet or wallet.available < Decimal(data.get('amount', 0)):
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Insufficient Funds",
+                    status=400
+                )
             try:
                 base_amount = float(data.get('amount'))
                 if base_amount <= 0:
@@ -287,7 +310,7 @@ class BillingAdmin(View):
                         "Amount must be greater than zero",
                         status=400
                     )
-                charge = calculate_fair_tiered_charge(base_amount)
+                charge = 0
                 total_amount = base_amount + charge
             except (ValueError, TypeError):
                 return self.create_error_response(
@@ -317,7 +340,7 @@ class BillingAdmin(View):
             data['amount_plus_charge'] = total_amount
             payment_data = {**data, 'ref': reference, 'charge': charge}
             payment = InitiatePayment().post(
-                contribution_id=data.get('contribution'), **payment_data
+                contribution_id=str(contribution.id), **payment_data
             )
             logger.info(f"B2C transfer processing completed: {request_id}")
             return self.create_success_response({
@@ -394,15 +417,21 @@ class BillingAdmin(View):
         try:
             data = self.unpack_request_data(request)
             print(data)
+            contribution = ContributionService().get(~Q(status="INACTIVE"),alias=data.get('contribution'))
+            if not contribution:
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Contribution is expired or not found",
+                    status=404
+                )
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
-            base_amount = float(data.get('amount'))
+            base_amount = float(data.pop('amount'))
             charge = calculate_fair_tiered_charge(base_amount)
-            total_amount = base_amount + charge
             logger.info(f"C2B payment initiated: {request_id} - {reference}")
             response = self.client.receive_c2b_payment(
                 external_reference=reference,
-                amount=total_amount,
+                amount=base_amount,
                 phone_number=data.get('phone_number'),
                 reason=f"Contribution on {timezone.now()}",
                 results_url=settings.PESAWAY_C2B_CALLBACK
@@ -421,16 +450,17 @@ class BillingAdmin(View):
                 last_name = parts[1] if len(parts) > 1 else "User"
                 role = RoleService().get(name="USER")
                 actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=first_name, last_name=last_name, role=role)
+            amount_minus_charge = base_amount - charge
             receipt = response.data.get('TransactionID')
-            topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt, 'actioned_by': actioned_by}
+            topup_data = {**data, 'ref': reference, 'charge': charge, "amount": amount_minus_charge, "amount_plus_charge": base_amount,'receipt': receipt, 'actioned_by': actioned_by}
             topup_result = InitiateTopup().post(
-                contribution_id=data.get('contribution'), **topup_data
+                contribution_id=str(contribution.id), **topup_data
             )
             return self.create_success_response({
                 "transaction_reference": reference,
                 "amount": base_amount,
                 "charge": charge,
-                "total_amount": total_amount,
+                "amount_minus_charge": amount_minus_charge,
                 "status": "PENDING",
                 **topup_result
             })
@@ -472,7 +502,7 @@ class BillingAdmin(View):
             pledger_name = data.get('full_name') or 'Anonymous'
             pledger_contact = data.get('phone_number') or 'Anonymous'
             purpose = data.get('purpose') or 'No purpose specified'
-            contribution = ContributionService().get(id=data.get('contribution'))
+            contribution = ContributionService().get(alias=data.get('contribution'))
             if not contribution:
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,

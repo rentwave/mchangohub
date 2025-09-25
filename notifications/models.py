@@ -26,7 +26,7 @@ class Notification(BaseModel):
     user = models.ForeignKey('users.User', null=True, blank=True, on_delete=models.CASCADE)
     delivery_method = models.CharField(max_length=10, choices=DeliveryMethods.choices, default=DeliveryMethods.PUSH)
     context = models.JSONField(default=dict)
-    template = models.CharField(max_length=20)
+    template = models.CharField(max_length=100)
     frequency = models.CharField(
         max_length=20, choices=NotificationFrequency.choices, default=NotificationFrequency.ONCE)
     unique_key = models.CharField(

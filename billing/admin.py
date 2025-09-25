@@ -1,13 +1,20 @@
+import csv
+import json
+from datetime import timedelta, datetime
 from decimal import Decimal
 
 from django.contrib import admin
-from django.db.models import Sum, Count, Avg, Q
-from django.utils.html import format_html
-from django.urls import path
-from django.template.response import TemplateResponse
+from django.db.models import Sum, Count, Avg, Q, ExpressionWrapper, Value, FloatField
+from django.db.models.functions import TruncMonth, TruncDay
+from django.forms import DecimalField
+from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.safestring import mark_safe
+from django.db import models
 
 from base.models import State
-from .models import WalletAccount, WalletTransaction, WorkflowActionLog, PledgeLog, Pledge
+from .models import WalletAccount, WalletTransaction, WorkflowActionLog, PledgeLog, Pledge, RevenueLog
+from .reporting.revenue_analytics import RevenueAnalytics, RevenueReporting
 
 
 class WorkflowActionLogInline(admin.TabularInline):
@@ -159,7 +166,7 @@ class WalletTransactionAdmin(admin.ModelAdmin, DashboardDataMixin):
     date_hierarchy = 'date_created'
     list_per_page = 50
     
-    actions = ['approve_topup_transaction', 'reject_topup_transaction', 'approve_payment_transaction', 'reject_payment_transaction']
+    actions = ['approve_topup_transaction', 'revenue_generated', 'reject_topup_transaction', 'approve_payment_transaction', 'reject_payment_transaction']
     
     def wallet_account_display(self, obj):
         return obj.wallet_account.account_number
@@ -184,6 +191,15 @@ class WalletTransactionAdmin(admin.ModelAdmin, DashboardDataMixin):
     def reject_payment_transaction(self, request, queryset):
         for obj in queryset:
             obj.wallet_account.payment_rejected(obj.amount, obj.reference)
+
+    def revenue_generated(self, obj):
+        """Show revenue generated from this transaction."""
+        total = obj.revenue_logs.aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
+        if total > 0:
+            return format_html('<strong style="color: #4caf50;">KES {:,.2f}</strong>', total)
+        return "KES 0.00"
+
+    revenue_generated.short_description = "Revenue Generated"
     
     def amount_display(self, obj):
         return self.format_currency(obj.wallet_account.currency, obj.amount)
@@ -240,11 +256,19 @@ class WalletAccountAdmin(admin.ModelAdmin, DashboardDataMixin):
             account.unfreeze_account()
         self.message_user(request, f"{queryset.count()} account(s) have been unfrozen.")
 
+
     def view_wallet_dashboard(self, request, queryset):
         """Redirects admin to wallet detailed dashboard."""
         dashboard_url = reverse('admin:wallet_dashboard')
         return redirect(dashboard_url)
     view_wallet_dashboard.short_description = "View Wallet Detailed Dashboard"
+
+    def contribution_name(self, obj):
+        return getattr(obj.contribution, 'name', 'N/A')
+
+    contribution_name.short_description = "Contribution"
+
+
 
     fieldsets = (
         ('Account Information', {
@@ -708,3 +732,550 @@ class PledgeStatusFilter(admin.SimpleListFilter):
         return queryset
 
 
+from decimal import Decimal
+from django.contrib import admin
+from django.db import models, connection
+from django.db.models import Sum, Count, Q, Avg, Min, Max
+from django.http import HttpResponse, HttpResponseRedirect
+from django.urls import path, reverse
+from django.utils.html import format_html, mark_safe
+from django.utils import timezone
+from django.template.response import TemplateResponse
+from django.contrib import messages
+from datetime import datetime, timedelta
+import json
+import csv
+
+from billing.models import RevenueLog, WalletAccount, WalletTransaction
+
+
+class RevenueAdminMixin:
+    """
+    Mixin for Django admin to add revenue-related functionality.
+    """
+
+    def get_daily_revenue_summary(self, obj):
+        """Admin method to show daily revenue summary."""
+        if hasattr(obj, 'date_created'):
+            date = obj.date_created.date()
+            summary = RevenueLog.objects.daily_revenue_summary(date)
+            return f"KES {summary['total']:,.2f}"
+        return "N/A"
+
+    get_daily_revenue_summary.short_description = "Daily Revenue"
+
+    def get_charge_rate_display(self, obj):
+        """Admin method to display charge rate as percentage."""
+        if hasattr(obj, 'charge_rate') and obj.charge_rate:
+            return f"{float(obj.charge_rate * 100):.2f}%"
+        return "N/A"
+
+    get_charge_rate_display.short_description = "Charge Rate"
+
+    def get_revenue_status(self, obj):
+        """Admin method to display revenue status from metadata."""
+        if hasattr(obj, 'metadata') and obj.metadata:
+            status = obj.metadata.get('status', 'unknown')
+            colors = {
+                'pending': '#ff9800',  # Orange
+                'realized': '#4caf50',  # Green
+                'unrealized': '#f44336',  # Red
+                'unknown': '#9e9e9e'  # Gray
+            }
+            color = colors.get(status, '#9e9e9e')
+            return format_html(
+                '<span style="color: {}; font-weight: bold;">{}</span>',
+                color,
+                status.title()
+            )
+        return "Unknown"
+
+    get_revenue_status.short_description = "Status"
+
+
+@admin.register(RevenueLog)
+class RevenueLogAdmin(admin.ModelAdmin, RevenueAdminMixin):
+    list_display = [
+        'reference', 'revenue_type', 'formatted_amount', 'formatted_original_amount',
+        'get_charge_rate_display', 'get_revenue_status', 'wallet_account_display', 'date_created'
+    ]
+    list_filter = [
+        'revenue_type',
+        'date_created',
+        ('wallet_account__contribution', admin.RelatedOnlyFieldListFilter),
+    ]
+    search_fields = [
+        'reference', 'description', 'parent_transaction__reference',
+        'wallet_account__account_number', 'wallet_account__contribution__name'
+    ]
+    readonly_fields = ['date_created', 'date_modified']
+    raw_id_fields = ['wallet_account', 'parent_transaction']
+    date_hierarchy = 'date_created'
+
+    # Enhanced actions for analytics
+    actions = ['view_analytics_dashboard', 'view_detailed_breakdown']
+
+    fieldsets = (
+        (None, {
+            'fields': ('wallet_account', 'parent_transaction', 'revenue_type')
+        }),
+        ('Amount Details', {
+            'fields': ('amount', 'original_amount', 'charge_rate')
+        }),
+        ('Reference & Description', {
+            'fields': ('reference', 'description')
+        }),
+        ('Metadata', {
+            'fields': ('metadata',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('date_created', 'date_modified'),
+            'classes': ('collapse',)
+        })
+    )
+
+    class Media:
+        css = {
+            'all': ('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',)
+        }
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'wallet_account', 'wallet_account__contribution', 'parent_transaction'
+        )
+
+    def view_analytics_dashboard(self, request, queryset):
+        """Redirect to comprehensive analytics dashboard."""
+        # Store queryset IDs in session for the analytics view
+        queryset_ids = list(queryset.values_list('id', flat=True))
+        request.session['analytics_queryset_ids'] = queryset_ids
+
+        analytics_url = reverse('admin:revenue_analytics_dashboard')
+        return HttpResponseRedirect(analytics_url)
+
+    view_analytics_dashboard.short_description = "📊 View Analytics Dashboard"
+
+    def view_detailed_breakdown(self, request, queryset):
+        """Redirect to detailed breakdown view."""
+        queryset_ids = list(queryset.values_list('id', flat=True))
+        request.session['breakdown_queryset_ids'] = queryset_ids
+
+        breakdown_url = reverse('admin:revenue_detailed_breakdown')
+        return HttpResponseRedirect(breakdown_url)
+
+    view_detailed_breakdown.short_description = "💼 View Detailed Breakdown"
+
+    def formatted_amount(self, obj):
+        from decimal import Decimal
+        amount = obj.amount
+        if not isinstance(amount, Decimal):
+            try:
+                amount = Decimal(str(amount))
+            except Exception:
+                amount = Decimal("0.00")
+
+        formatted = f"{amount:,.2f}"
+        return format_html("<strong>KES {}</strong>", formatted)
+
+    formatted_amount.short_description = "Revenue Amount"
+    formatted_amount.admin_order_field = 'amount'
+
+    def formatted_original_amount(self, obj):
+        """Display original amount with proper formatting."""
+        from decimal import Decimal
+        amount = obj.original_amount
+        if not isinstance(amount, Decimal):
+            try:
+                amount = Decimal(str(amount))
+            except Exception:
+                amount = Decimal("0.00")
+
+        formatted = f"{amount:,.2f}"
+        return format_html("KES {}", formatted)
+
+    formatted_original_amount.short_description = "Original Amount"
+    formatted_original_amount.admin_order_field = 'original_amount'
+
+    # def formatted_total_revenue(self, obj):
+    #     """Display the total accumulated revenue (wallet balance)."""
+    #     try:
+    #         total = RevenueLog.objects.first()
+    #         amount = total.amount if total else Decimal("0.00")
+    #     except Exception:
+    #         amount = Decimal("0.00")
+    #
+    #     return format_html("KES {:,.2f}", amount)
+    #
+    # formatted_total_revenue.short_description = "Total Revenue"
+
+    # formatted_total_revenue.short_description = "Total Revenue"
+
+    def wallet_account_display(self, obj):
+        """Display wallet account info."""
+        return format_html(
+            '<a href="/admin/your_app/walletaccount/{}/change/">{}</a><br>'
+            '<small style="color: #666;">{}</small>',
+            obj.wallet_account.id,
+            obj.wallet_account.account_number,
+            obj.wallet_account.contribution.name if hasattr(obj.wallet_account.contribution, 'name') else 'N/A'
+        )
+
+    wallet_account_display.short_description = "Wallet Account"
+
+    def changelist_view(self, request, extra_context=None):
+        """Enhanced changelist with revenue summary."""
+        response = super().changelist_view(request, extra_context=extra_context)
+
+        try:
+            qs = response.context_data['cl'].queryset
+            summary = qs.aggregate(
+                total_revenue=Sum('amount'),
+                total_count=Count('id'),
+                avg_revenue=Avg('amount'),
+                topup_revenue=Sum('amount', filter=Q(revenue_type='topup_charge')),
+                withdrawal_revenue=Sum('amount', filter=Q(revenue_type='withdrawal_charge')),
+                topup_count=Count('id', filter=Q(revenue_type='topup_charge')),
+                withdrawal_count=Count('id', filter=Q(revenue_type='withdrawal_charge')),
+            )
+
+            for key, value in summary.items():
+                if value is None:
+                    summary[key] = Decimal('0.00') if 'revenue' in key or 'avg' in key else 0
+
+            response.context_data['summary'] = summary
+
+        except (AttributeError, KeyError):
+            pass
+
+        return response
+
+    def get_urls(self):
+        """Add custom URLs for analytics views."""
+        urls = super().get_urls()
+        custom_urls = [
+            path('analytics-dashboard/', self.admin_site.admin_view(self.analytics_dashboard_view),
+                 name='revenue_analytics_dashboard'),
+            path('detailed-breakdown/', self.admin_site.admin_view(self.detailed_breakdown_view),
+                 name='revenue_detailed_breakdown'),
+            path('export-analytics/', self.admin_site.admin_view(self.export_analytics_csv),
+                 name='revenue_export_analytics'),
+        ]
+        return custom_urls + urls
+
+    def get_database_compatible_queries(self, queryset):
+        """Get database-compatible queries for different DB engines."""
+        db_vendor = connection.vendor
+
+        if db_vendor == 'sqlite':
+            # SQLite-compatible queries
+            daily_data = queryset.extra(
+                select={'day': "date(date_created)"}
+            ).values('day').annotate(
+                daily_revenue=Sum('amount'),
+                daily_count=Count('id')
+            ).order_by('-day')[:7]
+
+            weekly_data = []  # Skip weekly for SQLite simplicity
+
+        elif db_vendor == 'mysql':
+            # MySQL-compatible queries
+            daily_data = queryset.extra(
+                select={'day': "DATE(date_created)"}
+            ).values('day').annotate(
+                daily_revenue=Sum('amount'),
+                daily_count=Count('id')
+            ).order_by('-day')[:7]
+
+            weekly_data = queryset.extra(
+                select={
+                    'week': 'YEARWEEK(date_created)',
+                    'week_start': 'DATE_SUB(date_created, INTERVAL WEEKDAY(date_created) DAY)'
+                }
+            ).values('week', 'week_start').annotate(
+                weekly_revenue=Sum('amount'),
+                weekly_count=Count('id')
+            ).order_by('-week')[:4]
+
+        else:  # PostgreSQL and others
+            daily_data = queryset.extra(
+                select={'day': "date_trunc('day', date_created)::date"}
+            ).values('day').annotate(
+                daily_revenue=Sum('amount'),
+                daily_count=Count('id')
+            ).order_by('-day')[:7]
+
+            weekly_data = queryset.extra(
+                select={
+                    'week': "date_trunc('week', date_created)::date"
+                }
+            ).values('week').annotate(
+                weekly_revenue=Sum('amount'),
+                weekly_count=Count('id')
+            ).order_by('-week')[:4]
+
+        return daily_data, weekly_data
+
+    def analytics_dashboard_view(self, request):
+        """Comprehensive analytics dashboard with tables and charts."""
+        # Get queryset from session or use all records
+        queryset_ids = request.session.get('analytics_queryset_ids')
+        if queryset_ids:
+            queryset = RevenueLog.objects.filter(id__in=queryset_ids)
+            request.session.pop('analytics_queryset_ids', None)  # Clear after use
+        else:
+            queryset = RevenueLog.objects.all()
+
+        total_records = queryset.count()
+
+        # Basic analytics
+        analytics = queryset.aggregate(
+            total_revenue=Sum('amount'),
+            total_count=Count('id'),
+            avg_revenue=Avg('amount'),
+            max_revenue=Max('amount'),
+            min_revenue=Min('amount'),
+            topup_revenue=Sum('amount', filter=Q(revenue_type='topup_charge')),
+            withdrawal_revenue=Sum('amount', filter=Q(revenue_type='withdrawal_charge')),
+            adjustment_revenue=Sum('amount', filter=Q(revenue_type='adjustment')),
+            topup_count=Count('id', filter=Q(revenue_type='topup_charge')),
+            withdrawal_count=Count('id', filter=Q(revenue_type='withdrawal_charge')),
+            adjustment_count=Count('id', filter=Q(revenue_type='adjustment')),
+        )
+
+        # Handle None values
+        for key, value in analytics.items():
+            if value is None:
+                analytics[key] = Decimal(
+                    '0.00') if 'revenue' in key or 'avg' in key or 'max' in key or 'min' in key else 0
+
+        # Status breakdown
+        status_breakdown = []
+        status_data = {}
+        for log in queryset:
+            status = log.metadata.get('status', 'unknown') if log.metadata else 'unknown'
+            if status not in status_data:
+                status_data[status] = {'count': 0, 'amount': Decimal('0.00')}
+            status_data[status]['count'] += 1
+            status_data[status]['amount'] += log.amount
+
+        for status, data in status_data.items():
+            percentage = (data['count'] / total_records * 100) if total_records > 0 else 0
+            status_breakdown.append({
+                'status': status.title(),
+                'count': data['count'],
+                'amount': data['amount'],
+                'percentage': percentage
+            })
+
+        # Top accounts
+        top_accounts = queryset.values(
+            'wallet_account__account_number',
+            'wallet_account__contribution__name'
+        ).annotate(
+            total_revenue=Sum('amount'),
+            transaction_count=Count('id'),
+            avg_revenue=Avg('amount')
+        ).order_by('-total_revenue')[:10]
+
+        # Revenue by type for charts
+        revenue_by_type = [
+            {
+                'type': 'TopUp Charges',
+                'amount': float(analytics['topup_revenue']),
+                'count': analytics['topup_count'],
+                'color': '#4CAF50'
+            },
+            {
+                'type': 'Withdrawal Charges',
+                'amount': float(analytics['withdrawal_revenue']),
+                'count': analytics['withdrawal_count'],
+                'color': '#FF9800'
+            },
+            {
+                'type': 'Adjustments',
+                'amount': float(analytics['adjustment_revenue']),
+                'count': analytics['adjustment_count'],
+                'color': '#2196F3'
+            }
+        ]
+
+        # Get time-based data
+        daily_data, weekly_data = self.get_database_compatible_queries(queryset)
+
+        # Prepare chart data
+        chart_data = {
+            'revenue_by_type': revenue_by_type,
+            'daily_trend': [
+                {
+                    'date': str(day['day']),
+                    'revenue': float(day['daily_revenue']),
+                    'count': day['daily_count']
+                }
+                for day in daily_data
+            ],
+            'status_distribution': [
+                {
+                    'status': item['status'],
+                    'amount': float(item['amount']),
+                    'count': item['count']
+                }
+                for item in status_breakdown
+            ]
+        }
+
+        context = {
+            'title': 'Revenue Analytics Dashboard',
+            'subtitle': f'Analysis of {total_records:,} revenue records',
+            'analytics': analytics,
+            'status_breakdown': status_breakdown,
+            'top_accounts': top_accounts,
+            'revenue_by_type': revenue_by_type,
+            'daily_data': daily_data,
+            'weekly_data': weekly_data,
+            'chart_data': json.dumps(chart_data),
+            'total_records': total_records,
+            'opts': self.model._meta,
+            'has_view_permission': True,
+        }
+
+        return TemplateResponse(request, 'admin/revenue_analytics_dashboard.html', context)
+
+    def detailed_breakdown_view(self, request):
+        """Detailed breakdown view with comprehensive tables."""
+        queryset_ids = request.session.get('breakdown_queryset_ids')
+        if queryset_ids:
+            queryset = RevenueLog.objects.filter(id__in=queryset_ids)
+            request.session.pop('breakdown_queryset_ids', None)
+        else:
+            queryset = RevenueLog.objects.all()
+
+        total_records = queryset.count()
+
+        monthly_data = (
+            queryset
+            .annotate(month=TruncMonth("date_created"))
+            .values("month")
+            .annotate(
+                monthly_revenue=Sum("amount"),
+                monthly_count=Count("id"),
+                avg_daily_revenue=ExpressionWrapper(
+                    Sum("amount") / Count(TruncDay("date_created"), distinct=True),
+                    output_field=FloatField(),
+                ),
+            )
+            .order_by("-month")[:6]
+        )
+
+        type_breakdown = queryset.values('revenue_type').annotate(
+            type_revenue=Sum('amount'),
+            type_count=Count('id'),
+            avg_amount=Avg('amount'),
+            max_amount=Max('amount'),
+            min_amount=Min('amount')
+        ).order_by('-type_revenue')
+
+        account_performance = queryset.values(
+            'wallet_account__account_number',
+            'wallet_account__contribution__name'
+        ).annotate(
+            total_revenue=Sum('amount'),
+            transaction_count=Count('id'),
+            avg_revenue=Avg('amount'),
+            last_transaction=Max('date_created')
+        ).order_by('-total_revenue')[:20]
+
+        thirty_days_ago = timezone.now().date() - timedelta(days=30)
+        daily_performance = queryset.filter(
+            date_created__date__gte=thirty_days_ago
+        ).extra(
+            select={'day': "date(date_created)" if connection.vendor == 'sqlite' else "DATE(date_created)"}
+        ).values('day').annotate(
+            daily_revenue=Sum('amount'),
+            daily_count=Count('id')
+        ).order_by('-day')
+
+        context = {
+            'title': 'Detailed Revenue Breakdown',
+            'subtitle': f'Comprehensive analysis of {total_records:,} revenue records',
+            'monthly_data': monthly_data,
+            'type_breakdown': type_breakdown,
+            'account_performance': account_performance,
+            'daily_performance': daily_performance,
+            'total_records': total_records,
+            'opts': self.model._meta,
+            'has_view_permission': True,
+        }
+
+        return TemplateResponse(request, 'admin/revenue_detailed_breakdown.html', context)
+
+    def export_analytics_csv(self, request):
+        """Export analytics summary to CSV."""
+        queryset = self.get_queryset(request)
+
+        response = HttpResponse(content_type='text/csv')
+        response[
+            'Content-Disposition'] = f'attachment; filename="revenue_analytics_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+
+        writer = csv.writer(response)
+
+        writer.writerow(['REVENUE ANALYTICS SUMMARY'])
+        writer.writerow(['Generated on:', timezone.now().strftime('%Y-%m-%d %H:%M:%S')])
+        writer.writerow(['Total Records:', queryset.count()])
+        writer.writerow([])
+
+        # Write detailed data
+        writer.writerow([
+            'Date', 'Reference', 'Revenue Type', 'Amount', 'Original Amount',
+            'Charge Rate', 'Status', 'Account Number', 'Contribution', 'Description'
+        ])
+
+        for log in queryset.select_related('wallet_account', 'wallet_account__contribution'):
+            writer.writerow([
+                log.date_created.strftime('%Y-%m-%d %H:%M:%S'),
+                log.reference,
+                log.get_revenue_type_display() if hasattr(log, 'get_revenue_type_display') else log.revenue_type,
+                float(log.amount),
+                float(log.original_amount),
+                f"{float(log.charge_rate * 100):.2f}%" if log.charge_rate else 'N/A',
+                log.metadata.get('status', 'unknown') if log.metadata else 'unknown',
+                log.wallet_account.account_number,
+                getattr(log.wallet_account.contribution, 'name', 'N/A'),
+                log.description
+            ])
+
+        return response
+
+
+class RevenueAdminSite(admin.AdminSite):
+    site_header = "Revenue Management Dashboard"
+    site_title = "Revenue Admin"
+    index_title = "Revenue Analytics & Management"
+
+    def index(self, request, extra_context=None):
+        """Enhanced admin index with revenue overview."""
+        extra_context = extra_context or {}
+
+        today_summary = RevenueLog.objects.daily_revenue_summary()
+
+        today = timezone.now().date()
+        month_start = today.replace(day=1)
+        month_summary = RevenueAnalytics.get_revenue_summary(month_start, today)
+
+        pending_vs_realized = RevenueAnalytics.get_pending_vs_realized_revenue()
+
+        extra_context.update({
+            'today_revenue': today_summary,
+            'month_revenue': month_summary,
+            'pending_vs_realized': pending_vs_realized,
+            'total_accounts': WalletAccount.objects.filter(is_active=True).count(),
+            'total_transactions_today': WalletTransaction.objects.filter(
+                date_created__date=today
+            ).count(),
+        })
+
+        return super().index(request, extra_context)
+
+
+revenue_admin = RevenueAdminSite(name='revenue_admin')
+revenue_admin.register(RevenueLog, RevenueLogAdmin)

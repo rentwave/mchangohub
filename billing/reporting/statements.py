@@ -47,7 +47,7 @@ def generate_mpesa_statement_pdf(
     total_in = sum(Decimal(str(t.get("paid_in", 0) or 0)) for t in txs)
     total_out = sum(Decimal(str(t.get("withdrawn", 0) or 0)) for t in txs)
     total_charges = sum(Decimal(str(t.get("charge", 0) or 0)) for t in txs)
-    net_movement = total_in - (total_out + total_charges)
+    net_movement = total_in - (total_out - total_charges)
     closing_balance = opening_balance + net_movement
 
     faint_green = colors.HexColor("#F0F9F0")
@@ -193,7 +193,7 @@ def generate_mpesa_statement_pdf(
         withdrawn = Decimal(str(t.get("withdrawn", 0) or 0))
         charge = Decimal(str(t.get("charge", 0) or 0))
         running += paid_in
-        running -= (withdrawn + charge)
+        running -= (withdrawn - charge)
 
         narration_text = t.get("narration", "")
         words = narration_text.split()

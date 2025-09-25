@@ -193,7 +193,7 @@ class InitiateTopup(InterfaceBase):
                     logger.exception("Failed to cleanup failed transaction: %s", cleanup_error)
             return self.ERROR_CODES['TRANSACTION_FAILED']
     
-    def post(self, contribution_id: int, request=None, **kwargs) -> Dict[str, Any]:
+    def post(self, contribution_id, request=None, **kwargs) -> Dict[str, Any]:
         try:
             validation_result = self._validate_inputs(contribution_id, **kwargs)
             if validation_result:

@@ -107,7 +107,8 @@ class User(BaseModel, AbstractUser):
 
     @property
     def full_name(self):
-        return "%s %s %s" % (self.first_name, self.other_name, self.last_name)
+        parts = [self.first_name, self.other_name, self.last_name]
+        return " ".join(filter(None, parts))
 
     def generate_username(self, name: str) -> str:
         name = "user" if not name else name

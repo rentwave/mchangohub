@@ -1,9 +1,13 @@
+import re
+from typing import Union
+
 from dateutil.parser import parse
+from django.db.models.functions import Trim, Replace, Concat, Coalesce
 from django.forms.models import model_to_dict
-from django.utils import timezone
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, F, Value
 from django.db import transaction
 
+from base.backend.service import WalletAccountService, WalletTransactionService
 from contributions.backend.services import ContributionService
 from contributions.models import Contribution
 from notifications.backend.notification_management_service import NotificationManagementService
@@ -15,6 +19,33 @@ from utils.common import normalize_phone_number
 class ContributionManagementService:
 
     REQUIRED_FIELDS = ['name', 'target_amount', 'end_date']
+
+    @staticmethod
+    def _generate_contribution_alias() -> str:
+        """
+        Generate a new contribution alias in the format ``G-XXXX``.
+
+        The alias is incremented based on the highest existing alias. If no
+        valid alias exists, the sequence starts from ``G-0001``.
+
+        :return: The newly generated contribution alias.
+        :rtype: str
+        :raises Exception: If database access fails while retrieving the last contribution.
+        """
+        last_contribution = (
+            Contribution.objects.select_for_update()
+            .exclude(alias__isnull=True)
+            .order_by("-alias")
+            .first()
+        )
+        if last_contribution and re.match(r"^C-\d{4}$", last_contribution.alias):
+            last_number = int(last_contribution.alias.split("-")[1])
+        else:
+            last_number = 0
+
+        alias = f"C-{last_number + 1:04d}"
+
+        return alias
 
     @transaction.atomic
     def create_contribution(self, user: User, **kwargs) -> Contribution:
@@ -50,7 +81,10 @@ class ContributionManagementService:
         if ContributionService().filter(creator=user, name=name).exists():
             raise ValueError("Contribution name already exists")
 
+        alias = self._generate_contribution_alias()
+
         contribution = ContributionService().create(
+            alias=alias,
             name=name,
             description=description,
             target_amount=target_amount,
@@ -73,7 +107,7 @@ class ContributionManagementService:
                     "target_amount": contribution.target_amount,
                     "end_date": contribution.end_date.strftime("%Y-%m-%d"),
                     "creator_name": user.full_name,
-                    "contribution_link": f"https://mchangohub.com/contributions/{contribution.id}",
+                    "contribution_link": f"https://mchangohub.com/contributions/{contribution.alias}",
                 },
             )
 
@@ -134,30 +168,6 @@ class ContributionManagementService:
         return updated_contribution
 
     @staticmethod
-    def update_contribution_status(contribution_id: str) -> Contribution:
-        """
-        Update the status of a contribution based on its end_date relative to current time.
-
-        :param contribution_id: The UUID or string ID of the contribution.
-        :type contribution_id: str
-        :raises ValueError: If contribution is not found.
-        :return: The contribution instance with updated status.
-        :rtype: Contribution
-        """
-        contribution = ContributionService().get(id=contribution_id)
-        if contribution is None:
-            raise ValueError('Contribution not found')
-
-        now = timezone.now()
-        new_status = Contribution.Status.ONGOING if contribution.end_date > now else Contribution.Status.OVERDUE
-
-        if contribution.status != new_status:
-            contribution.status = new_status
-            contribution.save()
-
-        return contribution
-
-    @staticmethod
     def delete_contribution(user: User, contribution_id: str) -> Contribution:
         """
         Soft-delete a contribution by marking its status as INACTIVE.
@@ -181,7 +191,8 @@ class ContributionManagementService:
         contribution.save()
         return contribution
 
-    def get_contribution(self, contribution_id: str) -> dict:
+    @staticmethod
+    def get_contribution(contribution_id: str) -> dict:
         """
         Retrieve a contribution as a dictionary.
 
@@ -197,23 +208,64 @@ class ContributionManagementService:
         if contribution is None:
             raise ValueError('Contribution not found')
 
-        contribution = self.update_contribution_status(contribution_id)
+        # Update status
+        contribution.update_status()
 
+        # Convert contribution model instance to dict
         contribution_dict = model_to_dict(contribution)
-        contribution_dict["id"] = str(contribution.id)
-        contribution_dict["creator_name"] = contribution.creator.full_name
 
-        return contribution_dict
+        # Get wallet account
+        wallet_account = WalletAccountService().get(contribution=contribution)
+        available_wallet_amount = wallet_account.available
 
+        # Get transactions
+        transactions = list(
+            WalletTransactionService()
+            .filter(
+                wallet_account=wallet_account,
+                transaction_type="topup",
+                status__name="Completed",
+            )
+            .annotate(
+                actioned_by_full_name=Trim(
+                    Replace(
+                        Concat(
+                            Coalesce(F("actioned_by__first_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("actioned_by__other_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("actioned_by__last_name"), Value("")),
+                        ),
+                        Value("  "),
+                        Value(" "),
+                    )
+                )
+            )
+            .order_by("-date_created")
+            .values()
+        )
+
+        contribution_data = {
+            **contribution_dict,
+            "id": str(contribution.id),
+            "date_created": contribution.date_created,
+            "date_modified": contribution.date_modified,
+            "creator_name": contribution.creator.full_name,
+            "available_wallet_amount": available_wallet_amount,
+            "transactions": transactions
+        }
+
+        return contribution_data
+
+    @staticmethod
     def filter_contributions(
-            self,
             search_term: str = "",
             creator_id: str | None = None,
             status: str | None = None,
             start_date: str | None = None,
             end_date: str | None = None,
             queryset: bool = False,
-    ) -> QuerySet | list[dict]:
+    ) -> Union[QuerySet, list[dict]]:
         """
         Filter and retrieve contributions based on search criteria.
 
@@ -257,11 +309,30 @@ class ContributionManagementService:
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
 
-        contributions = ContributionService().filter(filters)
+        contributions = (
+            ContributionService()
+            .filter(filters)
+            .annotate(
+                available_wallet_amount=F("wallet_accounts__available"),
+                creator_name=Trim(
+                    Replace(
+                        Concat(
+                            Coalesce(F("creator__first_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("creator__other_name"), Value("")),
+                            Value(" "),
+                            Coalesce(F("creator__last_name"), Value("")),
+                        ),
+                        Value("  "),
+                        Value(" "),
+                    )
+                )
+            )
+        )
 
         # Update statuses of filtered contributions
         for contribution in contributions:
-            self.update_contribution_status(contribution.id)
+            contribution.update_status()
 
         if queryset:
             return contributions

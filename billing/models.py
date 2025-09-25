@@ -4,10 +4,13 @@ from django.db.models import Sum
 from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from decimal import Decimal
+from decimal import Decimal, ROUND_UP
 import logging
 from typing import Dict, List, Optional
 from enum import Enum
+
+from django.utils.html import format_html
+
 from base.models import BaseModel, State, EntryType, AccountFieldType, BalanceEntryType
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
 from contributions.models import Contribution
@@ -26,6 +29,166 @@ class WorkflowActionType(models.TextChoices):
     MONEY_TO_RESERVED = 'money_to_reserved', 'Money Added to Reserved'
     MONEY_FROM_RESERVED = 'money_from_reserved', 'Money Deducted from Reserved'
     MONEY_FROM_CURRENT = 'money_from_current', 'Money Deducted from Current'
+    MONEY_FOR_WITHDRAWAL = 'money_for_withdrawal', 'Money Prepared for Withdrawal'
+    CHARGE_DEDUCTED = 'charge_deducted', 'Charge Deducted for Withdrawal'
+
+
+class RevenueType(models.TextChoices):
+    """Types of revenue sources"""
+    TOPUP_CHARGE = 'topup_charge', 'TopUp Charge'
+    WITHDRAWAL_CHARGE = 'withdrawal_charge', 'Withdrawal Charge'
+    ADJUSTMENT = 'adjustment', 'Manual Adjustment'
+
+
+class RevenueLogManager(models.Manager):
+    """Custom manager for RevenueLog with useful query methods."""
+
+    def by_type(self, revenue_type):
+        """Filter by revenue type."""
+        return self.filter(revenue_type=revenue_type)
+
+    def for_date_range(self, start_date, end_date):
+        """Get revenue for a specific date range."""
+        return self.filter(date_created__range=[start_date, end_date])
+
+    def total_revenue(self):
+        """Get total revenue across all sources."""
+        return self.aggregate(total=models.Sum('amount'))['total'] or Decimal('0.00')
+
+    def daily_revenue_summary(self, date=None):
+        """Get revenue summary for a specific date (default: today)."""
+        if date is None:
+            date = timezone.now().date()
+
+        daily_revenue = self.filter(date_created__date=date).aggregate(
+            topup_charges=models.Sum('amount', filter=models.Q(revenue_type='topup_charge')),
+            withdrawal_charges=models.Sum('amount', filter=models.Q(revenue_type='withdrawal_charge')),
+            adjustments=models.Sum('amount', filter=models.Q(revenue_type='adjustment')),
+            total=models.Sum('amount')
+        )
+
+        return {
+            'date': date,
+            'topup_charges': daily_revenue['topup_charges'] or Decimal('0.00'),
+            'withdrawal_charges': daily_revenue['withdrawal_charges'] or Decimal('0.00'),
+            'adjustments': daily_revenue['adjustments'] or Decimal('0.00'),
+            'total': daily_revenue['total'] or Decimal('0.00')
+        }
+
+
+class RevenueLog(BaseModel):
+    """
+    Tracks all revenue generated from charges.
+    This table logs every charge deducted as our revenue source.
+    """
+    wallet_account = models.ForeignKey('WalletAccount', on_delete=models.CASCADE,
+                                       related_name='revenue_logs', db_index=True)
+    parent_transaction = models.ForeignKey('WalletTransaction', on_delete=models.CASCADE,
+                                           related_name='revenue_logs', db_index=True)
+    revenue_type = models.CharField(max_length=20, choices=RevenueType.choices, db_index=True)
+    amount = models.DecimalField(max_digits=18, decimal_places=2)
+    original_amount = models.DecimalField(max_digits=18, decimal_places=2,
+                                          help_text="Original transaction amount before charge")
+    charge_rate = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True,
+                                      help_text="Rate used to calculate charge (e.g., 0.01 for 1%)")
+    reference = models.CharField(max_length=100, db_index=True)
+    description = models.CharField(max_length=255)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    objects = RevenueLogManager()
+
+    class Meta:
+        verbose_name = "Revenue Log"
+        verbose_name_plural = "Revenue Logs"
+        ordering = ['-id']
+        indexes = [
+            models.Index(fields=['wallet_account', '-id']),
+            models.Index(fields=['parent_transaction', '-id']),
+            models.Index(fields=['revenue_type', '-id']),
+            models.Index(fields=['date_created']),
+            models.Index(fields=['reference']),
+        ]
+        constraints = [
+            models.CheckConstraint(check=models.Q(amount__gte=0), name='positive_revenue_amount'),
+            models.CheckConstraint(check=models.Q(original_amount__gte=0), name='positive_original_amount'),
+        ]
+
+    def __str__(self):
+        return f" {self.amount} - {self.reference}"
+
+    @property
+    def total_revenue_generated(self):
+        """
+        Calculate total revenue generated for this wallet account.
+        """
+        total = self.wallet_account.revenue_logs.aggregate(
+            Sum("amount")
+        )["amount__sum"] or Decimal("0.00")
+        return total
+
+    def formatted_total_revenue(self):
+        """
+        Nicely formatted total revenue in HTML.
+        """
+        amount = self.total_revenue_generated
+        if not isinstance(amount, Decimal):
+            try:
+                amount = Decimal(str(amount))
+            except Exception:
+                amount = Decimal("0.00")
+        formatted_amount = f"KES {amount:,.2f}"
+        return format_html("<strong>{}</strong>", formatted_amount)
+    formatted_total_revenue.short_description = "Total Revenue Generated"
+
+CHARGE_TIERS = [
+    (10000, 20000, Decimal('0.031')),  # 3.1% for 10,001 - 20,000
+    (20000, 30000, Decimal('0.032')),  # 3.2% for 20,001 - 30,000
+    (30000, 40000, Decimal('0.033')),  # 3.3% for 30,001 - 40,000
+    (40000, 50000, Decimal('0.034')),  # 3.4% for 40,001 - 50,000
+    (50000, 60000, Decimal('0.035')),  # 3.5% for 50,001 - 60,000
+    (60000, 70000, Decimal('0.036')),  # 3.6% for 60,001 - 70,000
+    (70000, 80000, Decimal('0.037')),  # 3.7% for 70,001 - 80,000
+    (80000, 90000, Decimal('0.038')),  # 3.8% for 80,001 - 90,000
+    (90000, 100000, Decimal('0.039')),  # 3.9% for 90,001 - 100,000
+    (100000, 110000, Decimal('0.04')),  # 4% for 100,001 - 110,000
+    (110000, 120000, Decimal('0.041')),  # 4.1% for 110,001 - 120,000
+    (120000, 130000, Decimal('0.042')),  # 4.2% for 120,001 - 130,000
+    (130000, 140000, Decimal('0.043')),  # 4.3% for 130,001 - 140,000
+    (140000, 150000, Decimal('0.044')),  # 4.4% for 140,001 - 150,000
+    (150000, 250000, Decimal('0.045')),  # 4.5% for 150,001 - 250,000
+]
+
+
+def calculate_fair_tiered_charge(amount_kes: float) -> float:
+    """Calculate charge with decimal precision and show breakdown"""
+    amount = Decimal(str(amount_kes))
+    charge_decimal = Decimal('0.0')
+    breakdown = []
+    if amount <= 10000:
+        charge = (amount * Decimal('0.03')).quantize(Decimal('0.01'), rounding=ROUND_UP)
+        breakdown.append(f"0 - 10,000 KES: 3% charge = {charge} KES")
+    else:
+        charge_decimal += Decimal('10000') * Decimal('0.03')
+        breakdown.append(f"0 - 10,000 KES: 3% charge = {charge_decimal} KES")
+        for lower, upper, rate in CHARGE_TIERS:
+            if amount > lower:
+                applicable_amount = min(amount, Decimal(str(upper))) - Decimal(str(lower))
+                tier_charge = applicable_amount * rate
+                charge_decimal += tier_charge
+                breakdown.append(f"{lower + 1:,} - {upper:,} KES: {rate * 100}% charge = {tier_charge:.2f} KES")
+
+        charge = float(charge_decimal.quantize(Decimal('0.01'), rounding=ROUND_UP))
+    breakdown.append(f"Total Charge: {charge} KES")
+    print(breakdown)
+    return charge
+
+def get_charge_rate_for_amount(amount: Decimal) -> Decimal:
+    """Get the effective charge rate for a given amount (for logging purposes)"""
+    if amount <= 0:
+        return Decimal('0.0')
+
+    charge = Decimal(str(calculate_fair_tiered_charge(float(amount))))
+    return (charge / amount).quantize(Decimal('0.0001'))
 
 
 class WorkflowActionLog(BaseModel):
@@ -221,6 +384,23 @@ class WalletAccount(BaseModel):
             workflow_actions.append(workflow_action)
         WorkflowActionLog.objects.bulk_create(workflow_actions)
 
+    def _log_revenue(self, transaction_obj, revenue_type, amount, original_amount, description, metadata=None):
+        """Helper method to log revenue from charges."""
+        charge_rate = get_charge_rate_for_amount(original_amount) if original_amount > 0 else Decimal('0.0')
+
+        RevenueLog.objects.create(
+            wallet_account=self,
+            parent_transaction=transaction_obj,
+            revenue_type=revenue_type,
+            amount=amount,
+            original_amount=original_amount,
+            charge_rate=charge_rate,
+            reference=transaction_obj.reference,
+            description=description,
+            metadata=metadata or {}
+        )
+        logger.info(f"Revenue logged: {amount} from {revenue_type} for transaction {transaction_obj.reference}")
+
     @transaction.atomic
     def initiate_topup(self, amount, reference, charge , receipt, amount_plus_charge, actioned_by, description="TopUp - Pending"):
         """
@@ -281,6 +461,19 @@ class WalletAccount(BaseModel):
 
         self._log_workflow_actions(transaction_obj, actions)
         logger.info(f"TopUp pending: {amount} added to account {self.account_number}")
+        if charge > 0:
+            self._log_revenue(
+                transaction_obj=transaction_obj,
+                revenue_type=RevenueType.TOPUP_CHARGE,
+                amount=charge,
+                original_amount=amount_plus_charge,
+                description=f'TopUp charge for {amount_plus_charge}',
+                metadata={
+                    'status': 'pending',
+                    'mpesa_reference': receipt,
+                    'total_received': str(amount_plus_charge)
+                }
+            )
         return transaction_obj
 
     @transaction.atomic
@@ -348,6 +541,19 @@ class WalletAccount(BaseModel):
 
         self._log_workflow_actions(transaction_obj, actions)
         logger.info(f"TopUp approved: {amount} moved to available in account {self.account_number}")
+        try:
+            revenue_logs = RevenueLog.objects.filter(
+                parent_transaction=transaction_obj,
+                revenue_type=RevenueType.TOPUP_CHARGE
+            )
+            for revenue_log in revenue_logs:
+                revenue_log.metadata.update({
+                    'status': 'realized',
+                    'approved_at': timezone.now().isoformat()
+                })
+                revenue_log.save()
+        except RevenueLog.DoesNotExist:
+            pass  # No charge was applied
         return transaction_obj
 
     @transaction.atomic
@@ -419,6 +625,20 @@ class WalletAccount(BaseModel):
 
         self._log_workflow_actions(transaction_obj, actions)
         logger.info(f"TopUp rejected: {amount} removed from account {self.account_number}")
+        try:
+            revenue_logs = RevenueLog.objects.filter(
+                parent_transaction=transaction_obj,
+                revenue_type=RevenueType.TOPUP_CHARGE
+            )
+            for revenue_log in revenue_logs:
+                revenue_log.metadata.update({
+                    'status': 'unrealized',
+                    'rejected_at': timezone.now().isoformat(),
+                    'rejection_reason': description
+                })
+                revenue_log.save()
+        except RevenueLog.DoesNotExist:
+            pass
         return transaction_obj
 
     @transaction.atomic
@@ -488,6 +708,8 @@ class WalletAccount(BaseModel):
         logger.info(f"Payment pending: {amount} reserved in account {self.account_number}")
         return transaction_obj
 
+
+
     @transaction.atomic
     def payment_approved(self, amount, reference, description="Payment - Approved", receipt=""):
         """
@@ -537,7 +759,7 @@ class WalletAccount(BaseModel):
             'current_after_approval': str(account.current),
         })
         transaction_obj.save()
-
+        charge = transaction_obj.charge or Decimal('0.00')
         actions = [
             {
                 'action_type': WorkflowActionType.MONEY_FROM_RESERVED,
@@ -628,6 +850,10 @@ class WalletAccount(BaseModel):
 
         self._log_workflow_actions(transaction_obj, actions)
         logger.info(f"Payment rejected: {amount} returned to available in account {self.account_number}")
+        self._log_workflow_actions(transaction_obj, actions)
+
+        charge = transaction_obj.charge or Decimal('0.00')
+        total_amount = amount + charge
         return transaction_obj
 
     def freeze_account(self):
@@ -710,6 +936,7 @@ class WalletTransaction(BaseModel):
     TRANSACTION_TYPES = [
         ('topup', 'TopUp'),
         ('payment', 'Payment'),
+        ('withdrawal', 'Withdrawal'),
         ('adjustment', 'Manual Adjustment'),
         ('refund', 'Refund'),
     ]

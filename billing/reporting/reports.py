@@ -96,7 +96,7 @@ class StatementGenerator:
         data = unpack_request_data(request)
         start_date = parse(data.get('start_date')).replace(hour=0, minute=0, second=0, microsecond=0) if data.get('start_date') else None
         end_date = parse(data.get('end_date')).replace(hour=23, minute=59, second=59, microsecond=999999) if data.get('start_date') else None
-        contribution = ContributionService().get(id=data.get("contribution"))
+        contribution = ContributionService().get(alias=data.get("contribution"))
         wallet_account = WalletAccountService().get(contribution=contribution)
         if not start_date or not end_date:
             
@@ -116,8 +116,8 @@ class StatementGenerator:
                 "reference": trx.receipt_number,
                 "counterparty": trx.metadata.get("counterparty",
                                                  "Mobile Money") if trx.metadata else "Mobile Money",
-                "paid_in": float(trx.amount) if trx.transaction_type.lower() == "topup" else 0.0,
-                "withdrawn": float(trx.amount) if trx.transaction_type.lower() == "payment" else 0.0,
+                "paid_in": float(trx.amount_plus_charge) if trx.transaction_type.lower() == "topup" else 0.0,
+                "withdrawn": float(trx.amount_plus_charge) if trx.transaction_type.lower() == "payment" else 0.0,
                 "charge": float(trx.charge or 0),
             }
             for trx in transactions
