@@ -47,11 +47,10 @@ class PesaWayAPIClient:
         """Get authentication token"""
         url = f"{self.base_url}/api/v1/token/"
         payload = {
-            "consumer_key": self.client_id,
-            "consumer_secret": self.client_secret,
+            "consumer_key": "@8E1th1@!WXq9C;&_@L;6e03&93re#20",
+            "consumer_secret": "941CUfQEP_7DpU50",
             "grant_type": "client_credentials",
         }
-
         response = requests.post(url, json=payload, timeout=self.timeout)
         print("Auth response status:", response.status_code)
         print("Auth response text:", response.text)
