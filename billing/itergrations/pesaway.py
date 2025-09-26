@@ -98,10 +98,9 @@ class PesaWayAPIClient:
                     response = requests.get(url, headers=headers, timeout=self.timeout)
                 else:
                     response = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
-
+            print(response.status_code, response.text)
             response.raise_for_status()
             data = response.json()
-
             return APIResponse(
                 success=True,
                 data=data,
