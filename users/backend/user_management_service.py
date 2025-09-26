@@ -86,7 +86,7 @@ class UserManagementService:
 
         # Check uniqueness for unique fields
         for field in self.UNIQUE_FIELDS:
-            val = data.get(field)
+            val = data.get(field, None)
             if val:
                 query = Q(**{field: val})
                 if user_id:

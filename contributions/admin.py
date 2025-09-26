@@ -9,13 +9,13 @@ from contributions.models import Contribution
 @admin.register(Contribution)
 class ContributionAdmin(admin.ModelAdmin):
     list_display = (
-        'name', 'creator', 'colored_status', 'target_amount',
+        'alias', 'name', 'creator', 'colored_status', 'target_amount',
         'amount_contributed_display', 'progress_balance', 'progress_days',
         'end_date', 'date_created',
     )
     list_filter = ('status', 'date_created', 'end_date')
     search_fields = (
-        'name', 'description', 'creator__username', 'creator__email',
+        'alias', 'name', 'description', 'creator__username', 'creator__email',
         'creator__phone_number', 'creator__first_name', 'creator__last_name',
     )
     ordering = ('-date_created',)
@@ -24,7 +24,9 @@ class ContributionAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'description', 'creator', 'target_amount', 'end_date', 'status')
+            'fields': (
+                'alias', 'name', 'description', 'creator', 'target_amount', 'end_date', 'status'
+            )
         }),
         ('Timestamps', {
             'fields': ('date_created', 'date_modified'),
@@ -55,12 +57,6 @@ class ContributionAdmin(admin.ModelAdmin):
         )
     
     amount_contributed_display.short_description = "Contributed"
-    
-    from decimal import Decimal
-    from django.utils.html import format_html
-    
-    from decimal import Decimal
-    from django.utils.html import format_html
     
     def progress_balance(self, obj):
         """Progress bar for balance with dynamic background."""

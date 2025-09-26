@@ -15,6 +15,7 @@ class Contribution(GenericBaseModel):
         OVERDUE = "OVERDUE", _("Overdue")
         INACTIVE = "INACTIVE", _("Inactive")
 
+    alias = models.CharField(max_length=50, null=True, blank=True)
     creator = models.ForeignKey('users.User', on_delete=models.CASCADE)
     target_amount = models.DecimalField(max_digits=12, decimal_places=2)
     end_date = models.DateTimeField()
@@ -83,7 +84,7 @@ class Contribution(GenericBaseModel):
             self.status = self.Status.OVERDUE
         else:
             self.status = self.Status.ONGOING
-        self.save(update_fields=["status", "date_updated"])
+        self.save(update_fields=["status", "date_modified"])
 
     def latest_transaction(self):
         """Get most recent transaction."""

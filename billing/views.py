@@ -5,6 +5,7 @@ from decimal import Decimal, ROUND_UP
 from typing import Dict, Any, Optional
 from functools import wraps
 
+from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -14,7 +15,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
-from base.backend.service import StateService
+from base.backend.service import StateService, WalletAccountService
 from billing.backend.interfaces.topup import InitiateTopup, ApproveTopupTransaction
 from billing.backend.interfaces.payment import InitiatePayment, ApprovePaymentTransaction
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
@@ -258,6 +259,14 @@ class BillingAdmin(View):
             data = self.unpack_request_data(request)
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
+            contribution = ContributionService().get(alias=data.get('contribution'))
+            wallet = WalletAccountService().get(contribution=contribution)
+            if not wallet or wallet.available < Decimal(data.get('amount', 0)):
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Insufficient Funds",
+                    status=400
+                )
             try:
                 base_amount = float(data.get('amount'))
                 if base_amount <= 0:
@@ -296,7 +305,7 @@ class BillingAdmin(View):
             data['amount_plus_charge'] = total_amount
             payment_data = {**data, 'ref': reference, 'charge': charge}
             payment = InitiatePayment().post(
-                contribution_id=data.get('contribution'), **payment_data
+                contribution_id=str(contribution.id), **payment_data
             )
             logger.info(f"B2C transfer processing completed: {request_id}")
             return self.create_success_response({
@@ -373,6 +382,13 @@ class BillingAdmin(View):
         try:
             data = self.unpack_request_data(request)
             print(data)
+            contribution = ContributionService().get(~Q(status="INACTIVE"),alias=data.get('contribution'))
+            if not contribution:
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Contribution is expired or not found",
+                    status=404
+                )
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
             base_amount = float(data.get('amount'))
@@ -381,7 +397,7 @@ class BillingAdmin(View):
             logger.info(f"C2B payment initiated: {request_id} - {reference}")
             response = self.client.receive_c2b_payment(
                 external_reference=reference,
-                amount=total_amount,
+                amount=base_amount,
                 phone_number=data.get('phone_number'),
                 reason=f"Contribution on {timezone.now()}",
                 results_url=settings.PESAWAY_C2B_CALLBACK
@@ -400,16 +416,17 @@ class BillingAdmin(View):
                 last_name = parts[1] if len(parts) > 1 else "User"
                 role = RoleService().get(name="USER")
                 actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=first_name, last_name=last_name, role=role)
+            amount_minus_charge = base_amount - charge
             receipt = response.data.get('TransactionID')
-            topup_data = {**data, 'ref': reference, 'charge': charge, "amount_plus_charge": total_amount,'receipt': receipt, 'actioned_by': actioned_by}
+            topup_data = {**data, 'ref': reference, 'charge': charge, "amount": amount_minus_charge, "amount_plus_charge": base_amount,'receipt': receipt, 'actioned_by': actioned_by}
             topup_result = InitiateTopup().post(
-                contribution_id=data.get('contribution'), **topup_data
+                contribution_id=str(contribution.id), **topup_data
             )
             return self.create_success_response({
                 "transaction_reference": reference,
                 "amount": base_amount,
                 "charge": charge,
-                "total_amount": total_amount,
+                "amount_minus_charge": amount_minus_charge,
                 "status": "PENDING",
                 **topup_result
             })
@@ -451,7 +468,7 @@ class BillingAdmin(View):
             pledger_name = data.get('full_name') or 'Anonymous'
             pledger_contact = data.get('phone_number') or 'Anonymous'
             purpose = data.get('purpose') or 'No purpose specified'
-            contribution = ContributionService().get(id=data.get('contribution'))
+            contribution = ContributionService().get(alias=data.get('contribution'))
             if not contribution:
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
