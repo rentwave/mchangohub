@@ -83,21 +83,24 @@ class PesaWayAPIClient:
         try:
             headers = self._get_headers()
             url = f"{self.base_url}{endpoint}"
-
+            print("Making request to:", url)
+            print("With payload:", payload)
+            print("Method:", method)
             if method.upper() == "GET":
                 response = requests.get(url, headers=headers, timeout=self.timeout)
             else:
                 response = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
-
-            # Handle token expiration
+            print("Response status:", response.status_code)
+            print("Response text:", response.text)
             if response.status_code == 401:
                 self._authenticate()
                 headers = self._get_headers()
-
                 if method.upper() == "GET":
                     response = requests.get(url, headers=headers, timeout=self.timeout)
                 else:
                     response = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+                print("Response status:", response.status_code)
+                print("Response text:", response.text)
             print(response.status_code, response.text)
             response.raise_for_status()
             data = response.json()
