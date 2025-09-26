@@ -53,12 +53,11 @@ class PesaWayAPIClient:
         }
 
         response = requests.post(url, json=payload, timeout=self.timeout)
+        print("Auth response status:", response.status_code)
+        print("Auth response text:", response.text)
         response.raise_for_status()
-
         data = response.json()
         token = data["data"]["token"]
-
-        # Store token (no expiration tracking)
         self.token = token
 
         return token
