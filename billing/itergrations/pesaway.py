@@ -188,6 +188,7 @@ class PesaWayAPIClient:
             "Reason": reason,
             "ResultsUrl": results_url,
         }
+        print("Receiving C2B Payment with payload:", payload)
         return self._make_request("POST", "/api/v1/mobile-money/receive-payment/", payload)
 
     def authorize_transaction(self, transaction_id: str, otp: str) -> APIResponse:

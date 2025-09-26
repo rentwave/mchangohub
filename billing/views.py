@@ -44,32 +44,12 @@ class TransactionStatus:
     PENDING = 2
 
 
-CHARGE_TIERS = [
-    (0, 1000, Decimal('0.005')),  # 0.5%
-    (1001, 10000, Decimal('0.01')),  # 1%
-    (10001, 100000, Decimal('0.015')),  # 1.5%
-    (100001, 500000, Decimal('0.02')),  # 2%
-    (500001, 1000000, Decimal('0.025')),  # 2.5%
-    (1000001, 5000000, Decimal('0.03')),  # 3%
-    (5000001, 10000000, Decimal('0.04')),  # 4%
-]
-
-
-def calculate_fair_tiered_charge(amount_kes: float) -> float:
-    """Calculate charge with decimal precision"""
+def calculate_fair_charge(amount_kes: float) -> float:
+    """Calculate constant 3% charge with decimal precision"""
     amount = Decimal(str(amount_kes))
-
-    if amount > 10000000:
-        charge = float((amount * Decimal('0.05')).quantize(Decimal('0.01'), rounding=ROUND_UP))
-    else:
-        charge_decimal = Decimal('0.0')
-        for lower, upper, rate in CHARGE_TIERS:
-            if amount > lower:
-                applicable_amount = min(amount, Decimal(str(upper))) - Decimal(str(lower))
-                charge_decimal += applicable_amount * rate
-        charge = float(charge_decimal.quantize(Decimal('0.01'), rounding=ROUND_UP))
-
-    return charge
+    rate = Decimal('0.03')  # 3%
+    charge = (amount * rate).quantize(Decimal('0.01'), rounding=ROUND_UP)
+    return float(charge)
 
 
 def rate_limit(requests_per_minute: int = 1000):
@@ -287,7 +267,7 @@ class BillingAdmin(View):
                         "Amount must be greater than zero",
                         status=400
                     )
-                charge = calculate_fair_tiered_charge(base_amount)
+                charge = calculate_fair_charge(base_amount)
                 total_amount = base_amount + charge
             except (ValueError, TypeError):
                 return self.create_error_response(
@@ -397,7 +377,7 @@ class BillingAdmin(View):
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
             base_amount = float(data.get('amount'))
-            charge = calculate_fair_tiered_charge(base_amount)
+            charge = calculate_fair_charge(base_amount)
             total_amount = base_amount + charge
             logger.info(f"C2B payment initiated: {request_id} - {reference}")
             response = self.client.receive_c2b_payment(
@@ -541,7 +521,7 @@ class BillingAdmin(View):
                 )
             reference = f"{TransactionRefGenerator().generate()}{int(time.time())}"
             base_amount = Decimal(str(data['amount']))
-            charge = Decimal(str(calculate_fair_tiered_charge(float(base_amount))))
+            charge = Decimal(str(calculate_fair_charge(float(base_amount))))
             total_amount = base_amount + charge
             logger.info(f"C2B payment initiated: {request_id} - {reference} for {total_amount}")
             response = self.client.receive_c2b_payment(
