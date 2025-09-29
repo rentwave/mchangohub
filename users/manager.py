@@ -13,7 +13,7 @@ class CustomUserManager(BaseUserManager):
         Override normalize_email so User.clean() doesn’t break.
         BaseUserManager already has an implementation, so call super().
         """
-        return super().normalize_email(email)
+        return email
 
     def _create_user(self, username, email, password, **extra_fields):
         if not username:
