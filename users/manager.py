@@ -8,6 +8,13 @@ from django.contrib.auth.hashers import make_password
 class CustomUserManager(BaseUserManager):
     use_in_migrations = True
 
+    def normalize_email(self, email):
+        """
+        Override normalize_email so User.clean() doesn’t break.
+        BaseUserManager already has an implementation, so call super().
+        """
+        return super().normalize_email(email)
+
     def _create_user(self, username, email, password, **extra_fields):
         if not username:
             raise ValueError("The given username must be set")
@@ -18,6 +25,7 @@ class CustomUserManager(BaseUserManager):
             extra_fields['role'] = default_role
 
         username = self.model.normalize_username(username)
+        email = self.normalize_email(email)  # ✅ normalize here
         user = self.model(username=username, email=email, **extra_fields)
         user.password = make_password(password)
         user.save(using=self._db)
