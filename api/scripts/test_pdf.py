@@ -1,7 +1,7 @@
 import requests
 
 resp = requests.post(
-    url="https://zentu.rentwaveafrica.co.ke/api/statements/summary/",
+    url="https://mchangohub.com/api/statements/summary/",
     json={"contribution": "9ea59c9f-9db7-4ad6-aad8-3e71149a2f90"},
 )
 
