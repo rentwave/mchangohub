@@ -10,7 +10,7 @@ class InitiateTopup(ProcessorBase):
 
 	def credit_account_uncleared(self, account, balance_log, amount, **kwargs):
 		"""Debits the account's available balance"""
-		return self.debit(account, balance_log, 'uncleared', amount, **kwargs)
+		return self.credit(account, balance_log, 'uncleared', amount, **kwargs)
 
 	def credit_account_current(self, account, balance_log, amount, **kwargs):
 		"""Credits the account's reserved balance"""
@@ -26,7 +26,7 @@ class ApproveTopupTransaction(ProcessorBase):
 
 	def credit_account_available(self, account, balance_log, amount, **kwargs):
 		"""Debits the account's reserved balance"""
-		return self.debit(account, balance_log, 'available', amount, **kwargs)
+		return self.credit(account, balance_log, 'available', amount, **kwargs)
 
 
 class RejectTopupTransaction(ProcessorBase):
