@@ -87,7 +87,8 @@ AUTH_USER_MODEL = "users.User"
 CSRF_ALLOWED_HOSTS = ['*']
 
 CSRF_TRUSTED_ORIGINS = [
-	'https://mchangohub.com'
+	'https://mchangohub.com',
+    "https://api.mchangohub.com"
 ]
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
