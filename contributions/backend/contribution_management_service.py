@@ -72,11 +72,8 @@ class ContributionManagementService:
             end_date = parse(str(kwargs.get("end_date")))
         except (ValueError, TypeError):
             raise ValueError("Invalid end date")
-
-        # Check the uniqueness of contribution name for this user
         if ContributionService().filter(creator=user, name=name).exists():
             raise ValueError("Contribution name already exists")
-
         alias = self._generate_contribution_alias()
 
         contribution = ContributionService().create(
@@ -85,12 +82,12 @@ class ContributionManagementService:
             description=description,
             target_amount=target_amount,
             end_date=end_date,
-            creator=user
+            file=file,
+            creator=user,
+            is_private=kwargs.get('is_private')
         )
         if not contribution:
             raise Exception("Contribution not created")
-
-        # Normalize phone numbers and send notifications if any
         phone_numbers = kwargs.get("phone_numbers", [])
         normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
         if normalized_phones:
@@ -106,7 +103,6 @@ class ContributionManagementService:
                     "contribution_link": f"https://mchangohub.com/contributions/{contribution.alias}",
                 },
             )
-
         return contribution
 
     @transaction.atomic

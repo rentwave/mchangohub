@@ -21,20 +21,13 @@ class ContributionAPIHandler:
         """
         try:
             user = request.user
-            # ** request.data
-            # {
-            #     "name": "Kayole church construction",
-            #     "description": "Raise money to build church",
-            #     "target_amount": "200000",
-            #     "end_date": "2025-12-31",
-            #     "phone_numbers": ["254715013269"]
-            # }
             k = {
                     "name": request.POST.get("name"),
                     "description": request.POST.get("description"),
                     "target_amount": request.POST.get("target_amount"),
                     "end_date": request.POST.get("end_date"),
-                    "phone_numbers": request.POST.get("phone_numbers")
+                    "phone_numbers": request.POST.get("phone_numbers"),
+                    "is_private": request.POST.get("is_private", False)
             }
             file = request.POST.get("file")
             contribution = ContributionManagementService().create_contribution(user=user, file=file, **k)

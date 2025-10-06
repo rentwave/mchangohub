@@ -88,6 +88,11 @@ jobs:
             git reset --hard
             git clean -fd
             git pull origin master
+            
+            sudo chown $USER:$USER .env
+            sudo chmod u+w .env
+            sudo chown -R $USER:$USER /srv/documents
+            chmod -R 755 /srv/documents
 
 
             LATEST_TAG="${{ needs.build.outputs.backend_tag }}"
