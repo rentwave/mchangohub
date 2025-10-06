@@ -260,6 +260,7 @@ class ContributionManagementService:
             status: str | None = None,
             start_date: str | None = None,
             end_date: str | None = None,
+            is_private: bool = False,
             queryset: bool = False,
     ) -> Union[QuerySet, list[dict]]:
         """
@@ -304,6 +305,9 @@ class ContributionManagementService:
 
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
+        
+        if is_private:
+            filters &= Q(is_private=is_private)
 
         contributions = (
             ContributionService()
