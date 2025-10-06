@@ -3,6 +3,7 @@ import logging
 from django.views.decorators.csrf import csrf_exempt
 
 from contributions.backend.contribution_management_service import ContributionManagementService
+from utils.common import get_request_data
 from utils.request_handler import request_handler
 from utils.response_provider import ResponseProvider
 
@@ -133,7 +134,8 @@ class ContributionAPIHandler:
 		:rtype: JsonResponse
 		"""
         try:
-            contribution_id = request.data.get("contribution_id", "")
+            data = get_request_data(request)
+            contribution_id = data.get("contribution_id", "")
             contribution_data = ContributionManagementService().get_contribution(contribution_id=contribution_id)
             return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
         except Exception as ex:
@@ -180,13 +182,14 @@ class ContributionAPIHandler:
 		:rtype: JsonResponse
 		"""
         try:
+            data = get_request_data(request)
             filters = {
-                "search_term": request.data.get("search_term", ""),
-                "creator_id": request.data.get("creator_id", ""),
-                "status": request.data.get("status", ""),
-                "start_date": request.data.get("start_date", ""),
-                "end_date": request.data.get("end_date", ""),
-                "is_private": request.data.get("is_private", False),
+                "search_term": data.get("search_term", ""),
+                "creator_id": data.get("creator_id", ""),
+                "status": data.get("status", ""),
+                "start_date": data.get("start_date", ""),
+                "end_date": data.get("end_date", ""),
+                "is_private": data.get("is_private", False),
             }
             contributions = ContributionManagementService().filter_contributions(**filters)
             return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
