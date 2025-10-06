@@ -5,6 +5,7 @@ import string
 
 from django.conf import settings
 from django.core.handlers.wsgi import WSGIRequest
+from django.http import QueryDict
 
 logger = logging.getLogger(__name__)
 
