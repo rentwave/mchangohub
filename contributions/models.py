@@ -40,6 +40,7 @@ class Contribution(GenericBaseModel):
     alias = models.CharField(max_length=50, null=True, blank=True)
     creator = models.ForeignKey('users.User', on_delete=models.CASCADE)
     profile = models.FileField(upload_to=default_uploads_to, storage=document_storage, null=True, blank=True)
+    is_private = models.BooleanField(default=False)
     target_amount = models.DecimalField(max_digits=12, decimal_places=2)
     end_date = models.DateTimeField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ONGOING)
