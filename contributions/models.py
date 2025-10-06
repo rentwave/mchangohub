@@ -1,4 +1,8 @@
+import os
+from datetime import datetime
 from decimal import Decimal
+
+from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.db.models import Sum, Count
 from django.utils import timezone
@@ -7,6 +11,24 @@ from django.apps import apps  # Lazy import for related models
 
 from base.models import GenericBaseModel
 
+
+def default_uploads_to(instance, filename):
+    """
+    Provides the renaming of the file and other details provisioning in the file path.
+
+    @param instance: The model instance we are saving.
+    @type instance: BulkType
+    @param filename: The file name of the file we are about to save.
+    @type filename: str
+    @return: An upload to path.
+    @rtype: str
+    """
+    today = datetime.now()
+    filename_base, filename_ext = os.path.splitext(filename)
+    label = "MCHANGO"
+    return f"{label}/{instance.alias}/raw/_{today.strftime('%Y%m%d_%H%M%S')}{filename_ext.lower()}"
+
+document_storage = FileSystemStorage(location="/srv/documents")
 
 class Contribution(GenericBaseModel):
     class Status(models.TextChoices):
@@ -17,6 +39,7 @@ class Contribution(GenericBaseModel):
 
     alias = models.CharField(max_length=50, null=True, blank=True)
     creator = models.ForeignKey('users.User', on_delete=models.CASCADE)
+    profile = models.FileField(upload_to=default_uploads_to, storage=document_storage, null=True, blank=True)
     target_amount = models.DecimalField(max_digits=12, decimal_places=2)
     end_date = models.DateTimeField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ONGOING)

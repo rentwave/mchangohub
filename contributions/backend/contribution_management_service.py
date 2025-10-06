@@ -58,15 +58,11 @@ class ContributionManagementService:
         :raises Exception: If contribution creation fails.
         :return: The created Contribution instance.
         """
-        # Validate required fields presence
         missing = [f for f in self.REQUIRED_FIELDS if not kwargs.get(f)]
         if missing:
             raise ValueError(f"Missing required fields: {', '.join(missing)}")
-
-        # Normalize inputs
         name = str(kwargs.get("name")).strip().title()
         description = str(kwargs.get("description", "")).strip().capitalize()
-
         try:
             target_amount = float(str(kwargs.get("target_amount")).strip())
         except (ValueError, TypeError):

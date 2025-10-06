@@ -25,7 +25,7 @@ class ContributionAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {
             'fields': (
-                'alias', 'name', 'description', 'creator', 'target_amount', 'end_date', 'status'
+                'alias', 'name', 'description', 'creator', 'target_amount', 'end_date', 'status', 'profile'
             )
         }),
         ('Timestamps', {

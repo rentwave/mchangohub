@@ -22,6 +22,13 @@ class ContributionAPIHandler:
         try:
             user = request.user
             # ** request.data
+            # {
+            #     "name": "Kayole church construction",
+            #     "description": "Raise money to build church",
+            #     "target_amount": "200000",
+            #     "end_date": "2025-12-31",
+            #     "phone_numbers": ["254715013269"]
+            # }
             k = {
                     "name": request.POST.get("name"),
                     "description": request.POST.get("description"),
