@@ -92,7 +92,8 @@ jobs:
             sudo chown $USER:$USER .env
             sudo chmod u+w .env
             sudo chown -R $USER:$USER /srv/documents
-            chmod -R 755 /srv/documents
+            sudo chown -R www-data:www-data /srv/documents
+            sudo chmod -R 755 /srv/documents
 
 
             LATEST_TAG="${{ needs.build.outputs.backend_tag }}"
