@@ -3,7 +3,7 @@ import logging
 from django.views.decorators.csrf import csrf_exempt
 
 from contributions.backend.contribution_management_service import ContributionManagementService
-from utils.common import get_request_data
+from utils.common import get_request_data, get_request_data_2
 from utils.request_handler import request_handler
 from utils.response_provider import ResponseProvider
 
@@ -135,7 +135,8 @@ class ContributionAPIHandler:
         :rtype: JsonResponse
         """
         try:
-            request_data = get_request_data(request)
+            request_data = get_request_data_2(request)
+            print(request_data)
             if isinstance(request_data, dict) and "contribution_id" in request_data:
                 contribution_id = request_data["contribution_id"]
                 contribution_data = ContributionManagementService().get_contribution(
@@ -190,7 +191,8 @@ class ContributionAPIHandler:
         :rtype: JsonResponse
         """
         try:
-            request_data = get_request_data(request)
+            request_data = get_request_data_2(request)
+            print(request_data)
             if not isinstance(request_data, dict):
                 return ResponseProvider.error(message="Invalid request data format. Expected a dictionary.")
             filters = {
