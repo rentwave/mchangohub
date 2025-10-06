@@ -2,6 +2,7 @@ import re
 from typing import Union
 
 from dateutil.parser import parse
+from django.conf import settings
 from django.db.models.functions import Trim, Replace, Concat, Coalesce
 from django.forms.models import model_to_dict
 from django.db.models import Q, QuerySet, F, Value
@@ -205,6 +206,8 @@ class ContributionManagementService:
 
         # Convert contribution model instance to dict
         contribution_dict = model_to_dict(contribution)
+        if contribution.profile:
+            contribution_dict['profile'] = settings.MEDIA_URL + str(contribution.profile)
 
         # Get wallet account
         wallet_account = WalletAccountService().get(contribution=contribution)
