@@ -32,7 +32,7 @@ class ContributionAPIHandler:
                     "phone_numbers": request.POST.get("phone_numbers"),
                     "is_private": is_private
             }
-            file = request.POST.get("file")
+            file = request.FILES['file']
             contribution = ContributionManagementService().create_contribution(user=user, file=file, **k)
             return ResponseProvider.created(
                 message="Contribution created successfully",
