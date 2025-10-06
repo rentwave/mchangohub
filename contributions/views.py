@@ -1,5 +1,7 @@
 import logging
 
+from django.views.decorators.csrf import csrf_exempt
+
 from contributions.backend.contribution_management_service import ContributionManagementService
 from utils.request_handler import request_handler
 from utils.response_provider import ResponseProvider
@@ -120,6 +122,7 @@ class ContributionAPIHandler:
             return ResponseProvider.error(message="An error occurred while fetching the contribution", error=str(ex))
     
     @staticmethod
+    @csrf_exempt
     def get_public_contribution(request):
         """
 		Retrieve a specific contribution by ID.
@@ -165,6 +168,7 @@ class ContributionAPIHandler:
             return ResponseProvider.error(message="An error occurred while filtering contributions", error=str(ex))
     
     @staticmethod
+    @csrf_exempt
     def filter_public_contributions(request):
         """
 		Retrieve contributions filtered by optional parameters.
