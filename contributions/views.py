@@ -145,3 +145,29 @@ class ContributionAPIHandler:
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - filter_contributions exception: {ex}")
             return ResponseProvider.error(message="An error occurred while filtering contributions", error=str(ex))
+    
+    @staticmethod
+    def filter_public_contributions(request):
+        """
+		Retrieve contributions filtered by optional parameters.
+
+		:param request: Django HTTP request object containing optional filters:
+			'search_term', 'creator_id', 'status', 'start_date', 'end_date'.
+		:type request: HttpRequest
+		:return: JSON response with the filtered contributions' list.
+		:rtype: JsonResponse
+		"""
+        try:
+            filters = {
+                "search_term": request.data.get("search_term", ""),
+                "creator_id": request.data.get("creator_id", ""),
+                "status": request.data.get("status", ""),
+                "start_date": request.data.get("start_date", ""),
+                "end_date": request.data.get("end_date", ""),
+                "is_private": request.data.get("is_private", False),
+            }
+            contributions = ContributionManagementService().filter_contributions(**filters)
+            return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
+        except Exception as ex:
+            logger.exception(f"ContributionAPIHandler - filter_contributions exception: {ex}")
+            return ResponseProvider.error(message="An error occurred while filtering contributions", error=str(ex))

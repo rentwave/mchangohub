@@ -10,4 +10,5 @@ urlpatterns = [
     path("update/", handler.update_contribution, name="update_contribution"),
     path("delete/", handler.delete_contribution, name="delete_contribution"),
     path("filter/", handler.filter_contributions, name="filter_contributions"),
+    path("filter-public/", handler.filter_contributions, name="filter-public"),
 ]
