@@ -48,7 +48,7 @@ class ContributionManagementService:
         return alias
 
     @transaction.atomic
-    def create_contribution(self, user: User, file, **kwargs) -> Contribution:
+    def create_contribution(self, user: User, file=None, **kwargs) -> Contribution:
         """
         Create a new contribution entry.
 
@@ -82,7 +82,7 @@ class ContributionManagementService:
             description=description,
             target_amount=target_amount,
             end_date=end_date,
-            file=file,
+            profile=file,
             creator=user,
             is_private=kwargs.get('is_private')
         )
