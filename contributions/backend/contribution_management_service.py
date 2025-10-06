@@ -1,6 +1,6 @@
 import re
 from typing import Union
-
+from django.core.files import File
 from dateutil.parser import parse
 from django.conf import settings
 from django.db.models.functions import Trim, Replace, Concat, Coalesce
@@ -83,12 +83,14 @@ class ContributionManagementService:
             description=description,
             target_amount=target_amount,
             end_date=end_date,
-            profile=file,
             creator=user,
             is_private=kwargs.get('is_private')
         )
         if not contribution:
             raise Exception("Contribution not created")
+        with open("/tmp/test.png", "rb") as f:
+            contribution.profile.save("test.png", File(f))
+        contribution.save()
         phone_numbers = kwargs.get("phone_numbers", [])
         # normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
         # if normalized_phones:
