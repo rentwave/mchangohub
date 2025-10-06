@@ -21,7 +21,16 @@ class ContributionAPIHandler:
         """
         try:
             user = request.user
-            contribution = ContributionManagementService().create_contribution(user=user, **request.data)
+            # ** request.data
+            k = {
+                    "name": request.POST.get("name"),
+                    "description": request.POST.get("description"),
+                    "target_amount": request.POST.get("target_amount"),
+                    "end_date": request.POST.get("end_date"),
+                    "phone_numbers": request.POST.get("phone_numbers")
+            }
+            file = request.POST.get("file")
+            contribution = ContributionManagementService().create_contribution(user=user, file=file, **k)
             return ResponseProvider.created(
                 message="Contribution created successfully",
                 data={"contribution_id": str(contribution.id)}

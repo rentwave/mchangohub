@@ -48,7 +48,7 @@ class ContributionManagementService:
         return alias
 
     @transaction.atomic
-    def create_contribution(self, user: User, **kwargs) -> Contribution:
+    def create_contribution(self, user: User, file, **kwargs) -> Contribution:
         """
         Create a new contribution entry.
 
