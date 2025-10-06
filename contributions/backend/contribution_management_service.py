@@ -83,15 +83,14 @@ class ContributionManagementService:
             description=description,
             target_amount=target_amount,
             end_date=end_date,
+            profile=file,
             creator=user,
             is_private=kwargs.get('is_private')
         )
         if not contribution:
             raise Exception("Contribution not created")
-        with open("/tmp/test.png", "rb") as f:
-            contribution.profile.save("test.png", File(f))
-        contribution.save()
         phone_numbers = kwargs.get("phone_numbers", [])
+        print(phone_numbers)
         # normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
         # if normalized_phones:
         #     NotificationManagementService(None).send_notification(
