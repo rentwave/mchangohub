@@ -108,7 +108,7 @@ class ContributionManagementService:
         return contribution
 
     @transaction.atomic
-    def update_contribution(self, user: User, contribution_id: str, **kwargs) -> Contribution:
+    def update_contribution(self, user: User, file, contribution_id: str, **kwargs) -> Contribution:
         """
         Update fields of a contribution identified by its ID.
 
@@ -122,10 +122,11 @@ class ContributionManagementService:
         contribution = ContributionService().get(id=contribution_id)
         if contribution is None:
             raise ValueError("Contribution not found")
-
         if user != contribution.creator:
             raise ValueError("You do not have permission to update this contribution")
-
+        if file:
+            contribution.profile = file
+            contribution.save()
         # Normalize fields in kwargs if present
         normalized_data = {}
 
@@ -154,8 +155,14 @@ class ContributionManagementService:
                 normalized_data["end_date"] = parse(str(kwargs["end_date"]))
             except (ValueError, TypeError):
                 raise ValueError("Invalid end date")
+        if "is_private" in kwargs:
+            try:
+                normalized_data["is_private"] = parse(str(kwargs["is_private"]))
+            except (ValueError, TypeError):
+                raise ValueError("Invalid end date")
 
         updated_contribution = ContributionService().update(pk=contribution.id, **normalized_data)
+        
         if not updated_contribution:
             raise Exception("Failed to update contribution")
 
@@ -170,7 +177,7 @@ class ContributionManagementService:
         :type user: User
         :param contribution_id: The UUID or string identifier of the contribution.
         :type contribution_id: str
-        :raises ValueError: If the contribution is not found or user lacks permission.
+        :raises ValueError: If the contribution is not found or usefiler lacks permission.
         :return: The contribution instance marked as inactive.
         :rtype: Contribution
         """

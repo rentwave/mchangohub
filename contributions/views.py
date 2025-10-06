@@ -56,10 +56,21 @@ class ContributionAPIHandler:
         try:
             user = request.user
             contribution_id = request.data.pop("contribution_id", "")
+            is_private = request.POST.get("is_private", False)
+            k = {
+                "name": request.POST.get("name"),
+                "description": request.POST.get("description"),
+                "target_amount": request.POST.get("target_amount"),
+                "end_date": request.POST.get("end_date"),
+                "phone_numbers": request.POST.get("phone_numbers"),
+                "is_private": is_private
+            }
+            file = request.FILES['file']
             ContributionManagementService().update_contribution(
                 user=user,
                 contribution_id=contribution_id,
-                **request.data
+                file=file
+                **k
             )
             return ResponseProvider.success(message="Contribution updated successfully")
         except Exception as ex:
