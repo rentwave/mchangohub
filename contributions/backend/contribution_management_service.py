@@ -89,20 +89,20 @@ class ContributionManagementService:
         if not contribution:
             raise Exception("Contribution not created")
         phone_numbers = kwargs.get("phone_numbers", [])
-        normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
-        if normalized_phones:
-            NotificationManagementService(None).send_notification(
-                delivery_method=Notification.DeliveryMethods.SMS,
-                recipients=normalized_phones,
-                template="sms_contribution_invitation",
-                context={
-                    "contribution_name": contribution.name,
-                    "target_amount": contribution.target_amount,
-                    "end_date": contribution.end_date.strftime("%Y-%m-%d"),
-                    "creator_name": user.full_name,
-                    "contribution_link": f"https://mchangohub.com/contributions/{contribution.alias}",
-                },
-            )
+        # normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
+        # if normalized_phones:
+        #     NotificationManagementService(None).send_notification(
+        #         delivery_method=Notification.DeliveryMethods.SMS,
+        #         recipients=normalized_phones,
+        #         template="sms_contribution_invitation",
+        #         context={
+        #             "contribution_name": contribution.name,
+        #             "target_amount": contribution.target_amount,
+        #             "end_date": contribution.end_date.strftime("%Y-%m-%d"),
+        #             "creator_name": user.full_name,
+        #             "contribution_link": f"https://mchangohub.com/contributions/{contribution.alias}",
+        #         },
+        #     )
         return contribution
 
     @transaction.atomic
