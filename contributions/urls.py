@@ -6,6 +6,7 @@ handler = ContributionAPIHandler()
 
 urlpatterns = [
     path("get/", handler.get_contribution, name="get_contribution"),
+    path("get-public/", handler.get_public_contribution, name="get_contribution"),
     path("create/", handler.create_contribution, name="create_contribution"),
     path("update/", handler.update_contribution, name="update_contribution"),
     path("delete/", handler.delete_contribution, name="delete_contribution"),

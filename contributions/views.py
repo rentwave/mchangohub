@@ -118,6 +118,24 @@ class ContributionAPIHandler:
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - get_contribution exception: {ex}")
             return ResponseProvider.error(message="An error occurred while fetching the contribution", error=str(ex))
+    
+    @staticmethod
+    def get_public_contribution(request):
+        """
+		Retrieve a specific contribution by ID.
+
+		:param request: Django HTTP request object containing 'contribution_id'.
+		:type request: HttpRequest
+		:return: JSON response with contribution data.
+		:rtype: JsonResponse
+		"""
+        try:
+            contribution_id = request.data.get("contribution_id", "")
+            contribution_data = ContributionManagementService().get_contribution(contribution_id=contribution_id)
+            return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
+        except Exception as ex:
+            logger.exception(f"ContributionAPIHandler - get_contribution exception: {ex}")
+            return ResponseProvider.error(message="An error occurred while fetching the contribution", error=str(ex))
 
     @staticmethod
     @request_handler
