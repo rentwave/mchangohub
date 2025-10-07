@@ -230,5 +230,5 @@ PESAWAY_CALLBACK_SIGNATURE_KEY = "!E3hFu@Ljsz0kF2@31h12e[Lf6eE49GF"
 PESAWAY_CLIENT_SECRET = "941CUfQEP_7DpU50"
 PESAWAY_CLIENT_ID = "@8E1th1@!WXq9C;&_@L;6e03&93re#20"
 PESAWAY_BASE_URL = os.environ.get("PESAWAY_BASE_URL", "https://api.pesaway.com")
-PESAWAY_B2C_CALLBACK = os.environ.get("PESAWAY_B2C_CALLBACK", "https://mchangohub.com/api/billing/api/v1/callbacks/b2c/")
-PESAWAY_C2B_CALLBACK = os.environ.get("PESAWAY_C2B_CALLBACK", "https://mchangohub.com/api/billing/api/v1/callbacks/c2b/")
+PESAWAY_B2C_CALLBACK = "https://api.mchangohub.com/api/billing/api/v1/callbacks/b2c/"
+PESAWAY_C2B_CALLBACK = "https://api.mchangohub.com/api/billing/api/v1/callbacks/c2b/"
