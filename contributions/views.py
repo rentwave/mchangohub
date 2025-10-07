@@ -189,7 +189,7 @@ class ContributionAPIHandler:
                 "status": data.get("status", ""),
                 "start_date": data.get("start_date", ""),
                 "end_date": data.get("end_date", ""),
-                "is_private": data.get("is_private", False),
+                "is_private": False,
             }
             contributions = ContributionManagementService().filter_contributions(**filters)
             return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)

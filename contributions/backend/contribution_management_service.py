@@ -313,8 +313,7 @@ class ContributionManagementService:
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
         print(is_private)
-        if is_private:
-            filters &= Q(is_private=is_private)
+        filters &= Q(is_private=is_private)
 
         contributions = (
             ContributionService()
