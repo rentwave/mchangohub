@@ -3,7 +3,7 @@ import logging
 from django.views.decorators.csrf import csrf_exempt
 
 from contributions.backend.contribution_management_service import ContributionManagementService
-from utils.common import get_request_data
+from utils.common import get_request_data, get_request_data_2
 from utils.request_handler import request_handler
 from utils.response_provider import ResponseProvider
 
@@ -121,26 +121,34 @@ class ContributionAPIHandler:
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - get_contribution exception: {ex}")
             return ResponseProvider.error(message="An error occurred while fetching the contribution", error=str(ex))
-    
+
+
     @staticmethod
     @csrf_exempt
     def get_public_contribution(request):
         """
-		Retrieve a specific contribution by ID.
+        Retrieve a specific contribution by ID.
 
-		:param request: Django HTTP request object containing 'contribution_id'.
-		:type request: HttpRequest
-		:return: JSON response with contribution data.
-		:rtype: JsonResponse
-		"""
+        :param request: Django HTTP request object containing 'contribution_id'.
+        :type request: HttpRequest
+        :return: JSON response with contribution data.
+        :rtype: JsonResponse
+        """
         try:
-            data = get_request_data(request)
-            contribution_id = data.get("contribution_id", "")
-            contribution_data = ContributionManagementService().get_contribution(contribution_id=contribution_id)
-            return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
+            request_data = get_request_data_2(request)
+            print(request_data)
+            if isinstance(request_data, dict) and "contribution_id" in request_data:
+                contribution_id = request_data["contribution_id"]
+                contribution_data = ContributionManagementService().get_contribution(
+                    contribution_id=contribution_id)
+                return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
+            else:
+                return ResponseProvider.error(message="'contribution_id' is missing from the request data")
+
         except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - get_contribution exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while fetching the contribution", error=str(ex))
+            logger.exception(f"ContributionAPIHandler - get_public_contribution exception: {ex}")
+            return ResponseProvider.error(message="An error occurred while fetching the contribution",
+                                          error=str(ex))
 
     @staticmethod
     @request_handler
@@ -168,31 +176,36 @@ class ContributionAPIHandler:
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - filter_contributions exception: {ex}")
             return ResponseProvider.error(message="An error occurred while filtering contributions", error=str(ex))
-    
+
+
     @staticmethod
     @csrf_exempt
     def filter_public_contributions(request):
         """
-		Retrieve contributions filtered by optional parameters.
+        Retrieve contributions filtered by optional parameters.
 
-		:param request: Django HTTP request object containing optional filters:
-			'search_term', 'creator_id', 'status', 'start_date', 'end_date'.
-		:type request: HttpRequest
-		:return: JSON response with the filtered contributions' list.
-		:rtype: JsonResponse
-		"""
+        :param request: Django HTTP request object containing optional filters:
+            'search_term', 'creator_id', 'status', 'start_date', 'end_date', 'is_private'.
+        :type request: HttpRequest
+        :return: JSON response with the filtered contributions' list.
+        :rtype: JsonResponse
+        """
         try:
-            data = get_request_data(request)
+            request_data = get_request_data_2(request)
+            print(request_data)
+            if not isinstance(request_data, dict):
+                return ResponseProvider.error(message="Invalid request data format. Expected a dictionary.")
             filters = {
-                "search_term": data.get("search_term", ""),
-                "creator_id": data.get("creator_id", ""),
-                "status": data.get("status", ""),
-                "start_date": data.get("start_date", ""),
-                "end_date": data.get("end_date", ""),
-                "is_private": False,
+                "search_term": request_data.get("search_term", ""),
+                "creator_id": request_data.get("creator_id", ""),
+                "status": request_data.get("status", ""),
+                "start_date": request_data.get("start_date", ""),
+                "end_date": request_data.get("end_date", ""),
+                "is_private": request_data.get("is_private", False),  # Default to False for privacy
+>
             }
             contributions = ContributionManagementService().filter_contributions(**filters)
             return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
         except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - filter_contributions exception: {ex}")
+            logger.exception(f"ContributionAPIHandler - filter_public_contributions exception: {ex}")
             return ResponseProvider.error(message="An error occurred while filtering contributions", error=str(ex))
