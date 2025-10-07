@@ -314,7 +314,7 @@ class ContributionManagementService:
             filters &= Q(date_created__date__lte=end_date)
         print(is_public)
         if is_public:
-            filters &= Q(is_private=is_public)
+            filters &= Q(is_private=False)
         contributions = (
             ContributionService()
             .filter(filters)
