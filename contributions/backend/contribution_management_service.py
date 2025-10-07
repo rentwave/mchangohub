@@ -267,7 +267,7 @@ class ContributionManagementService:
             status: str | None = None,
             start_date: str | None = None,
             end_date: str | None = None,
-            is_private: bool = False,
+            is_public: bool = False,
             queryset: bool = False,
     ) -> Union[QuerySet, list[dict]]:
         """
@@ -312,9 +312,9 @@ class ContributionManagementService:
 
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
-        print(is_private)
-        filters &= Q(is_private=is_private)
-
+        print(is_public)
+        if is_public:
+            filters &= Q(is_private=is_public)
         contributions = (
             ContributionService()
             .filter(filters)
