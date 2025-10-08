@@ -260,6 +260,7 @@ class BillingAdmin(View):
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
             contribution = ContributionService().get(alias=data.get('contribution'))
+            network = data.get('network', "MPESA")
             wallet = WalletAccountService().get(contribution=contribution)
             if not wallet or wallet.available < Decimal(data.get('amount', 0)):
                 return self.create_error_response(
@@ -288,6 +289,7 @@ class BillingAdmin(View):
             response = self.client.send_b2c_payment(
                 external_reference=reference,
                 amount=base_amount,
+                network=network,
                 phone_number=data.get('phone_number'),
                 reason=f"Withdrawal from contribution on {timezone.now()}",
                 results_url=settings.PESAWAY_B2C_CALLBACK
@@ -392,6 +394,7 @@ class BillingAdmin(View):
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
             base_amount = float(data.get('amount'))
+            network = data.get('network', "MPESA")
             charge = calculate_fair_charge(base_amount)
             total_amount = base_amount + charge
             logger.info(f"C2B payment initiated: {request_id} - {reference}")
@@ -399,6 +402,7 @@ class BillingAdmin(View):
                 external_reference=reference,
                 amount=base_amount,
                 phone_number=data.get('phone_number'),
+                network=network,
                 reason=f"Contribution on {timezone.now()}",
                 results_url=settings.PESAWAY_C2B_CALLBACK
             )

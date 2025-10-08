@@ -159,6 +159,7 @@ class PesaWayAPIClient:
             external_reference: str,
             amount: float,
             phone_number: str,
+            network: str,
             reason: str,
             results_url: str,
     ) -> APIResponse:
@@ -166,7 +167,7 @@ class PesaWayAPIClient:
             "ExternalReference": external_reference,
             "Amount": amount,
             "PhoneNumber": phone_number,
-            "Channel": "MPESA",
+            "Channel": network,
             "Reason": reason,
             "ResultsUrl": results_url,
         }
@@ -177,6 +178,7 @@ class PesaWayAPIClient:
             external_reference: str,
             amount: float,
             phone_number: str,
+            network: str,
             reason: str,
             results_url: str,
     ) -> APIResponse:
@@ -184,7 +186,7 @@ class PesaWayAPIClient:
             "ExternalReference": external_reference,
             "Amount": amount,
             "PhoneNumber": phone_number,
-            "Channel": "MPESA",
+            "Channel": network,
             "Reason": reason,
             "ResultsUrl": results_url,
         }
