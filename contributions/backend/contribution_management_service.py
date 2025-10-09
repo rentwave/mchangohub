@@ -287,37 +287,32 @@ class ContributionManagementService:
         
         if creator_id:
             filters &= Q(creator__id=creator_id)
-        
         if status:
             filters &= Q(status=status.upper())
-        
         if start_date:
             filters &= Q(date_created__date__gte=start_date)
-        
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
-        
         if is_public:
             filters &= Q(is_private=False)
         
-        # Prefetch related wallet accounts and creator
+        # Base queryset with prefetching
         contributions = (
             Contribution.objects
             .filter(filters)
             .select_related("creator")
-            .prefetch_related("wallet_accounts")
+            .prefetch_related("wallet_accounts__transactions")
         )
         
-        # Efficiently annotate wallet and creator info
+        # Efficient annotation for wallet + creator data
         annotated_qs = (
             contributions
             .annotate(
-                # ✅ FIXED: correct relation from WalletAccount → WalletTransaction
                 wallet_txn_count=Count("wallet_accounts__transactions", distinct=True),
                 available_wallet_amount=Coalesce(
                     Sum("wallet_accounts__available"),
                     Value(0.00),
-                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                    output_field=DecimalField(),  # ✅ Fixed here
                 ),
                 creator_name=Trim(
                     Replace(
@@ -335,7 +330,7 @@ class ContributionManagementService:
             )
         )
         
-        # Automatically update statuses in bulk (optional optimization)
+        # Optional bulk status update
         for contribution in annotated_qs.iterator(chunk_size=500):
             contribution.update_status()
         
