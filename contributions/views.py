@@ -74,7 +74,7 @@ class ContributionAPIHandler:
             ContributionManagementService().update_contribution(
                 user=user,
                 contribution_id=contribution_id,
-                file=file
+                file=file,
                 **k
             )
             return ResponseProvider.success(message="Contribution updated successfully")
