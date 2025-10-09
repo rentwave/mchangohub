@@ -295,16 +295,12 @@ class ContributionManagementService:
             filters &= Q(date_created__date__lte=end_date)
         if is_public:
             filters &= Q(is_private=False)
-        
-        # Base queryset with prefetching
         contributions = (
             Contribution.objects
             .filter(filters)
             .select_related("creator")
             .prefetch_related("wallet_accounts__transactions")
         )
-        
-        # Efficient annotation for wallet + creator data
         annotated_qs = (
             contributions
             .annotate(
@@ -312,7 +308,7 @@ class ContributionManagementService:
                 available_wallet_amount=Coalesce(
                     Sum("wallet_accounts__available"),
                     Value(0.00),
-                    output_field=DecimalField(),  # ✅ Fixed here
+                    output_field=DecimalField(max_digits=10, decimal_places=2),  # ✅ Fixed
                 ),
                 creator_name=Trim(
                     Replace(
@@ -329,14 +325,10 @@ class ContributionManagementService:
                 ),
             )
         )
-        
-        # Optional bulk status update
         for contribution in annotated_qs.iterator(chunk_size=500):
             contribution.update_status()
-        
         if queryset:
             return annotated_qs
-        
         return list(
             annotated_qs.values(
                 "id",
