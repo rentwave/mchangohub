@@ -4,8 +4,9 @@ from django.core.files import File
 from dateutil.parser import parse
 from django.conf import settings
 from django.db.models.functions import Trim, Replace, Concat, Coalesce
+from django.forms import DecimalField
 from django.forms.models import model_to_dict
-from django.db.models import Q, QuerySet, F, Value
+from django.db.models import Q, QuerySet, F, Value, Count
 from django.db import transaction
 
 from base.backend.service import WalletAccountService, WalletTransactionService
@@ -258,7 +259,7 @@ class ContributionManagementService:
         }
 
         return contribution_data
-
+    
     @staticmethod
     def filter_contributions(
             search_term: str = "",
@@ -268,57 +269,44 @@ class ContributionManagementService:
             end_date: str | None = None,
             is_public: bool = False,
             queryset: bool = False,
-    ) -> Union[QuerySet, list[dict]]:
+    ) -> Union["QuerySet", list[dict]]:
         """
-        Filter and retrieve contributions based on search criteria.
+		Filter, update, and retrieve contributions efficiently.
 
-        Automatically updates statuses using `update_contribution_status`.
-
-        :param search_term: Search string to match contribution fields and creator info.
-        :type search_term: str
-        :param creator_id: Filter contributions by creator ID.
-        :type creator_id: str | None
-        :param status: Filter contributions by status.
-        :type status: str | None
-        :param start_date: Filter contributions created on or after this date (YYYY-MM-DD).
-        :type start_date: str | None
-        :param end_date: Filter contributions created on or before this date (YYYY-MM-DD).
-        :type end_date: str | None
-        :param queryset: If True, returns a QuerySet; else returns a list of dicts.
-        :type queryset: bool
-        :return: Filtered contributions as a QuerySet or list of dicts.
-        :rtype: QuerySet[Contribution] | list[dict]
-        """
+		Automatically updates statuses before returning data.
+		"""
+        
         filters = Q()
-
         if search_term:
             filters &= Q(
-                Q(name__icontains=search_term) |
-                Q(description__icontains=search_term) |
-                Q(creator__username__icontains=search_term) |
-                Q(creator__email__icontains=search_term) |
-                Q(creator__phone_number__icontains=search_term)
+                Q(name__icontains=search_term)
+                | Q(description__icontains=search_term)
+                | Q(creator__username__icontains=search_term)
+                | Q(creator__email__icontains=search_term)
+                | Q(creator__phone_number__icontains=search_term)
             )
-
+        
         if creator_id:
             filters &= Q(creator__id=creator_id)
-
         if status:
             filters &= Q(status=status.upper())
-
         if start_date:
             filters &= Q(date_created__date__gte=start_date)
-
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
-        print(is_public)
         if is_public:
             filters &= Q(is_private=False)
         contributions = (
-            ContributionService()
+            Contribution.objects
             .filter(filters)
+            .select_related("creator", "wallet_account")
+        )
+        for contribution in contributions.iterator(chunk_size=1000):
+            contribution.update_status()
+        annotated_qs = (
+            contributions
             .annotate(
-                available_wallet_amount=F("wallet_accounts__available"),
+                wallet_txn_count=Count("wallet_account__wallettransaction", distinct=True),
                 creator_name=Trim(
                     Replace(
                         Concat(
@@ -331,15 +319,33 @@ class ContributionManagementService:
                         Value("  "),
                         Value(" "),
                     )
-                )
+                ),
+                available_wallet_amount=Coalesce(
+                    F("wallet_account__balance"),
+                    Value(0.00),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                ),
             )
         )
-
-        # Update statuses of filtered contributions
-        for contribution in contributions:
-            contribution.update_status()
-
         if queryset:
-            return contributions
-
-        return list(contributions.values())
+            return annotated_qs
+        return list(
+            annotated_qs.values(
+                "id",
+                "date_modified",
+                "date_created",
+                "synced",
+                "name",
+                "description",
+                "alias",
+                "creator_id",
+                "profile",
+                "is_private",
+                "target_amount",
+                "end_date",
+                "status",
+                "available_wallet_amount",
+                "creator_name",
+                "wallet_txn_count",
+            )
+        )
