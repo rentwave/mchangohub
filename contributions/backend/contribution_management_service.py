@@ -315,7 +315,7 @@ class ContributionManagementService:
                 # ✅ FIXED: correct relation from WalletAccount → WalletTransaction
                 wallet_txn_count=Count("wallet_accounts__transactions", distinct=True),
                 available_wallet_amount=Coalesce(
-                    Sum("wallet_accounts__available_balance"),
+                    Sum("wallet_accounts__available"),
                     Value(0.00),
                     output_field=DecimalField(max_digits=12, decimal_places=2),
                 ),
