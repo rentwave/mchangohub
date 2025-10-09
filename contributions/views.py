@@ -58,7 +58,7 @@ class ContributionAPIHandler:
         """
         try:
             user = request.user
-            contribution_id = request.data.pop("contribution_id", "")
+            contribution_id = request.POST.get("contribution_id", "")
             is_private = True
             if request.POST.get("is_private", "false") == "false":
                 is_private = False
