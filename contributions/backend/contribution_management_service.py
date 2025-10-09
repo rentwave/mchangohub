@@ -6,7 +6,7 @@ from django.conf import settings
 from django.db.models.functions import Trim, Replace, Concat, Coalesce
 from django.forms import DecimalField
 from django.forms.models import model_to_dict
-from django.db.models import Q, QuerySet, F, Value, Count
+from django.db.models import Q, QuerySet, F, Value, Count, Sum
 from django.db import transaction
 
 from base.backend.service import WalletAccountService, WalletTransactionService
@@ -271,12 +271,12 @@ class ContributionManagementService:
             queryset: bool = False,
     ) -> Union["QuerySet", list[dict]]:
         """
-		Filter, update, and retrieve contributions efficiently.
+        Filter, update, and retrieve contributions efficiently.
 
-		Automatically updates statuses before returning data.
-		"""
-        
+        Automatically updates statuses before returning data.
+        """
         filters = Q()
+        
         if search_term:
             filters &= Q(
                 Q(name__icontains=search_term)
@@ -288,25 +288,35 @@ class ContributionManagementService:
         
         if creator_id:
             filters &= Q(creator__id=creator_id)
+        
         if status:
             filters &= Q(status=status.upper())
+        
         if start_date:
             filters &= Q(date_created__date__gte=start_date)
+        
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
+        
         if is_public:
             filters &= Q(is_private=False)
         contributions = (
             Contribution.objects
             .filter(filters)
-            .select_related("creator", "wallet_account")
+            .select_related("creator")
+            .prefetch_related("wallet_accounts")
         )
         for contribution in contributions.iterator(chunk_size=1000):
             contribution.update_status()
         annotated_qs = (
             contributions
             .annotate(
-                wallet_txn_count=Count("wallet_account__wallettransaction", distinct=True),
+                wallet_txn_count=Count("wallet_accounts__wallettransaction", distinct=True),
+                available_wallet_amount=Coalesce(
+                    Sum("wallet_accounts__balance"),
+                    Value(0.00),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                ),
                 creator_name=Trim(
                     Replace(
                         Concat(
@@ -319,11 +329,6 @@ class ContributionManagementService:
                         Value("  "),
                         Value(" "),
                     )
-                ),
-                available_wallet_amount=Coalesce(
-                    F("wallet_account__balance"),
-                    Value(0.00),
-                    output_field=DecimalField(max_digits=12, decimal_places=2),
                 ),
             )
         )
@@ -349,3 +354,4 @@ class ContributionManagementService:
                 "wallet_txn_count",
             )
         )
+
