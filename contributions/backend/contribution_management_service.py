@@ -127,7 +127,6 @@ class ContributionManagementService:
         if file:
             contribution.profile = file
             contribution.save()
-        # Normalize fields in kwargs if present
         normalized_data = {}
 
         if "name" in kwargs:
@@ -157,7 +156,7 @@ class ContributionManagementService:
                 raise ValueError("Invalid end date")
         if "is_private" in kwargs:
             try:
-                normalized_data["is_private"] = parse(str(kwargs["is_private"]))
+                normalized_data["is_private"] = kwargs["is_private"]
             except (ValueError, TypeError):
                 raise ValueError("Invalid end date")
 
