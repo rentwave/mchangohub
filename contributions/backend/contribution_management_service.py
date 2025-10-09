@@ -272,7 +272,6 @@ class ContributionManagementService:
     ) -> Union["QuerySet", list[dict]]:
         """
         Filter, update, and retrieve contributions efficiently.
-
         Automatically updates statuses before returning data.
         """
         filters = Q()
@@ -300,18 +299,21 @@ class ContributionManagementService:
         
         if is_public:
             filters &= Q(is_private=False)
+        
+        # Prefetch related wallet accounts and creator
         contributions = (
             Contribution.objects
             .filter(filters)
             .select_related("creator")
             .prefetch_related("wallet_accounts")
         )
-        for contribution in contributions.iterator(chunk_size=1000):
-            contribution.update_status()
+        
+        # Efficiently annotate wallet and creator info
         annotated_qs = (
             contributions
             .annotate(
-                wallet_txn_count=Count("wallet_accounts__wallettransaction", distinct=True),
+                # ✅ FIXED: correct relation from WalletAccount → WalletTransaction
+                wallet_txn_count=Count("wallet_accounts__transactions", distinct=True),
                 available_wallet_amount=Coalesce(
                     Sum("wallet_accounts__balance"),
                     Value(0.00),
@@ -332,8 +334,14 @@ class ContributionManagementService:
                 ),
             )
         )
+        
+        # Automatically update statuses in bulk (optional optimization)
+        for contribution in annotated_qs.iterator(chunk_size=500):
+            contribution.update_status()
+        
         if queryset:
             return annotated_qs
+        
         return list(
             annotated_qs.values(
                 "id",
