@@ -32,12 +32,10 @@ def check_transaction_status():
             base_url=getattr(settings, 'PESAWAY_BASE_URL', 'https://api.pesaway.com'),
             timeout=getattr(settings, 'PESAWAY_TIMEOUT', 30)
         )
-
         transaction_processors = {
             "topup": ApproveTopupTransaction(),
             "payment": ApprovePaymentTransaction(),
         }
-
         processed_count = 0
         time_threshold = timezone.now() - timedelta(minutes=1)
         logger.info(f"Checking pending transactions since {time_threshold} (Nairobi time)")
@@ -54,7 +52,7 @@ def check_transaction_status():
             for trx in pending_transactions:
                 try:
                     response = client.query_mobile_money_transaction(
-                        transaction_reference=trx.reference
+                        transaction_reference=trx.receipt_number
                     )
 
                     result_code = response.data.get("ResultCode")
