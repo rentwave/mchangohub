@@ -51,7 +51,8 @@ def check_transaction_status():
         }
 
         processed_count = 0
-        time_threshold = timezone.now() - timedelta(minutes=1)
+        time_threshold = timezone.now() - timedelta(minutes=3)
+        time_gte = timezone.now() - timedelta(minutes=3)
         logger.info(f"Checking pending transactions before {time_threshold}")
 
         service = WalletTransactionService()
@@ -62,6 +63,7 @@ def check_transaction_status():
                     status__name="Pending",
                     transaction_type=trx_type,
                     date_created__lte=time_threshold,
+                    date_created__gte=time_gte,
                 )
                 for trx in pending:
                     try:
