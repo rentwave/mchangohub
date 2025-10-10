@@ -71,7 +71,7 @@ def check_transaction_status():
                         )
                         continue
 
-                    if trx.state.name.lower() == "pending":
+                    if trx.status.name.lower() == "pending":
                         approval_result = processor.post(
                             request=None, reference=reference, receipt=receipt
                         )
