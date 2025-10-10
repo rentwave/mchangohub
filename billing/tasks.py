@@ -70,18 +70,13 @@ def check_transaction_status():
                             f"{trx_type.capitalize()} {trx.id} missing reference or receipt in response → {response}"
                         )
                         continue
-
-                    if trx.state.name.lower() == "pending":
-                        approval_result = processor.post(
-                            request=None, reference=reference, receipt=receipt
-                        )
-                        logger.info(
-                            f"{trx_type.capitalize()} transaction approved: {trx.id} → {approval_result}"
-                        )
-                        processed_count += 1
-                    else:
-                        logger.info(f"{trx_type.capitalize()} {trx.id} already processed, skipping.")
-
+                    approval_result = processor.post(
+                        request=None, reference=reference, receipt=receipt
+                    )
+                    logger.info(
+                        f"{trx_type.capitalize()} transaction approved: {trx.id} → {approval_result}"
+                    )
+                    processed_count += 1
                 except Exception as trx_err:
                     logger.error(
                         f"Failed processing {trx_type} transaction {trx.id}: {trx_err}",
