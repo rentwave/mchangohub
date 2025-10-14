@@ -86,6 +86,7 @@ def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
         withdrawable > 0 and
         (amount + charge) <= available
     )
+    to_withdraw = round(available - charge, 2)
     print(
         f"[DEBUG] Amount: {amount}, Charge: {charge}, Total Required: {amount + charge}, "
         f"Available: {available}, Withdrawable: {withdrawable}, Allowed: {can_withdraw}"
@@ -93,7 +94,7 @@ def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
     return {
         "can_withdraw": can_withdraw,
         "charge": charge,
-        "withdrawable": withdrawable,
+        "withdrawable": to_withdraw,
     }
 
 def calculate_fair_charge(amount_kes: float) -> float:
