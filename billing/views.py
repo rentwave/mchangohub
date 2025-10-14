@@ -314,7 +314,7 @@ class BillingAdmin(View):
                     status=400
                 )
 
-            can_withdraw = check_pesaway_withdrawal_charges(amount_kes=amount, available=wallet.available)
+            can_withdraw = check_pesaway_withdrawal_charges(amount_kes=float(amount), available=wallet.available)
             print(can_withdraw)
             if isinstance(can_withdraw, dict) and not can_withdraw.get("can_withdraw", False):
                 return self.create_error_response(
