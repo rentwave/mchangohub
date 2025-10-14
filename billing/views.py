@@ -69,10 +69,9 @@ def check_pesaway_withdrawal_charges(amount_kes, wallet=None):
     elif amount_kes <= 250000:
         charge = 39
     else:
-        raise ValueError("Amount exceeds maximum allowed for Pesaway charges")
-    if wallet is not None:
-        if getattr(wallet, "available", 0) < Decimal(amount_kes) + Decimal(charge):
-            return False
+        charge = 0
+    if wallet.available < Decimal(amount_kes) + Decimal(charge):
+        return False
     return True
 
 
