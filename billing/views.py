@@ -43,7 +43,6 @@ class TransactionStatus:
     FAILED = 1
     PENDING = 2
 
-from decimal import Decimal, ROUND_HALF_UP
 def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
     """
     Check if a withdrawal can be made considering Pesaway tiered charges.
@@ -55,11 +54,12 @@ def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
         10,001 - 20,000   -> 33
         20,001 - 250,000  -> 39
 
-    Returns:
-        dict with:
-            can_withdraw (bool)
-            charge (Decimal)
-            withdrawable (Decimal)
+    Rules:
+        - Find applicable charge based on amount.
+        - A withdrawal is allowed only if:
+            1. amount > charge
+            2. withdrawable > 0
+            3. (amount + charge) <= available
     """
     amount = Decimal(str(amount_kes))
     available = Decimal(str(available)) if available else Decimal("0")
@@ -78,10 +78,15 @@ def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
     if charge == 0:
         charge = tiers[-1][2]
     withdrawable = (amount - charge).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    can_withdraw = available >= withdrawable
-    if amount_kes > withdrawable:
-        can_withdraw = False
-    print(f"[DEBUG] Withdrawable: {withdrawable}, Charge: {charge}, Available: {available}, Allowed: {can_withdraw}")
+    can_withdraw = (
+        amount > charge and
+        withdrawable > 0 and
+        (amount + charge) <= available
+    )
+    print(
+        f"[DEBUG] Amount: {amount}, Charge: {charge}, Total Required: {amount + charge}, "
+        f"Available: {available}, Withdrawable: {withdrawable}, Allowed: {can_withdraw}"
+    )
     return {
         "can_withdraw": can_withdraw,
         "charge": charge,
