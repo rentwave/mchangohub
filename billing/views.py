@@ -44,6 +44,38 @@ class TransactionStatus:
     PENDING = 2
 
 
+def check_pesaway_withdrawal_charges(amount_kes, wallet=None):
+    """
+    Check if a withdrawal can be made considering Pesaway charges.
+
+    Tiers:
+    1 - 1,500       -> 12
+    1,501 - 5,000   -> 19
+    5,001 - 10,000  -> 24
+    10,001 - 20,000 -> 33
+    20,001 - 250,000 -> 39
+
+    Returns:
+        True if wallet has sufficient balance to cover amount + charges, False otherwise.
+    """
+    if amount_kes <= 1500:
+        charge = 12
+    elif amount_kes <= 5000:
+        charge = 19
+    elif amount_kes <= 10000:
+        charge = 24
+    elif amount_kes <= 20000:
+        charge = 33
+    elif amount_kes <= 250000:
+        charge = 39
+    else:
+        raise ValueError("Amount exceeds maximum allowed for Pesaway charges")
+    if wallet is not None:
+        if getattr(wallet, "available", 0) < amount_kes + charge:
+            return False
+    return True
+
+
 def calculate_fair_charge(amount_kes: float) -> float:
     """Calculate a 3% charge, minimum 15 KES if amount > 500"""
     amount = Decimal(amount_kes)
@@ -261,8 +293,16 @@ class BillingAdmin(View):
             reference = f"{base_reference}{int(time.time())}"
             contribution = ContributionService().get(alias=data.get('contribution'))
             network = data.get('network', "MPESA")
-            wallet = WalletAccountService().get(contribution=contribution)
-            if not wallet or wallet.available < Decimal(data.get('amount', 0)):
+            amount = data.get("amount", 0)
+            wallet = WalletAccountService().get(contribution=contribution, state__name="Active")
+            if not wallet or wallet.available < amount:
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Insufficient Funds",
+                    status=400
+                )
+            can_withdraw = check_pesaway_withdrawal_charges(amount_kes=amount, wallet=wallet)
+            if not can_withdraw:
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
                     "Insufficient Funds",
