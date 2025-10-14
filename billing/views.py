@@ -305,7 +305,7 @@ class BillingAdmin(View):
             contribution = ContributionService().get(alias=data.get('contribution'))
             network = data.get('network', "MPESA")
             amount = data.get("amount", 0)
-            wallet = WalletAccountService().get(contribution=contribution, state__name="Active")
+            wallet = WalletAccountService().get(contribution=contribution)
             if not wallet or wallet.available < amount:
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
