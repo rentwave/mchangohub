@@ -306,7 +306,7 @@ class BillingAdmin(View):
             network = data.get('network', "MPESA")
             amount = data.get("amount", 0)
             wallet = WalletAccountService().get(contribution=contribution)
-            if not wallet or wallet.available < amount:
+            if not wallet:
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
                     "Insufficient Funds",
