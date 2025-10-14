@@ -1,14 +1,44 @@
-# import requests
-#
-# resp = requests.post(
-#     url="https://mchangohub.com/api/statements/summary/",
-#     json={"contribution": "9ea59c9f-9db7-4ad6-aad8-3e71149a2f90"},
-# )
-#
-# if resp.status_code == 200 and resp.headers.get("content-type") == "application/pdf":
-#     with open("summary.pdf", "wb") as f:
-#         f.write(resp.content)
-#     print("✅ PDF saved as statement.pdf")
-# else:
-#     print(f"❌ Failed: {resp.status_code}")
-#     print(resp.text[:500])
+from decimal import Decimal, ROUND_HALF_UP
+
+def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
+    """
+    Check if a withdrawal can be made considering Pesaway tiered charges.
+
+    Charge Tiers (KES):
+        1 - 1,500         -> 12
+        1,501 - 5,000     -> 19
+        5,001 - 10,000    -> 24
+        10,001 - 20,000   -> 33
+        20,001 - 250,000  -> 39
+
+    Returns:
+        dict with:
+            can_withdraw (bool)
+            charge (Decimal)
+            withdrawable (Decimal)
+    """
+    amount = Decimal(str(amount_kes))
+    tiers = [
+        (Decimal("1500"), Decimal("12")),
+        (Decimal("5000"), Decimal("19")),
+        (Decimal("10000"), Decimal("24")),
+        (Decimal("20000"), Decimal("33")),
+        (Decimal("250000"), Decimal("39")),
+    ]
+    charge = Decimal("0")
+    for limit, fee in tiers:
+        if amount <= limit:
+            charge = fee
+            break
+    available = Decimal(str(available)) if available else Decimal("0")
+    withdrawable = (amount - charge).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    can_withdraw = available >= withdrawable
+    print(f"[DEBUG] Withdrawable: {withdrawable}, Charge: {charge}, Available: {available}, Allowed: {can_withdraw}")
+    return {
+        "can_withdraw": can_withdraw,
+        "charge": charge,
+        "withdrawable": withdrawable,
+    }
+
+can_withdraw = check_pesaway_withdrawal_charges(amount_kes=50000, available=50000)
+print(can_withdraw)

@@ -71,7 +71,8 @@ def check_pesaway_withdrawal_charges(amount_kes, wallet=None):
     else:
         charge = 0
     WITHDRAWABLE = Decimal(amount_kes) + Decimal(charge)
-    if wallet.available < WITHDRAWABLE:
+    print(WITHDRAWABLE)
+    if Decimal(wallet.available) < WITHDRAWABLE:
         return False
     return True
 
