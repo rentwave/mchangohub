@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal, ROUND_UP
 from typing import Dict, Any, Optional
 from functools import wraps
-
+from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -14,14 +14,11 @@ from django.views import View
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
-
 from base.backend.service import StateService, WalletAccountService
 from billing.backend.interfaces.topup import InitiateTopup, ApproveTopupTransaction
 from billing.backend.interfaces.payment import InitiatePayment, ApprovePaymentTransaction
 from billing.helpers.generate_unique_ref import TransactionRefGenerator
-
 import logging
-
 from billing.itergrations.pesaway import PesaWayAPIClient
 from billing.models import Pledge
 from contributions.backend.services import ContributionService
@@ -62,6 +59,12 @@ def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
             3. (amount + charge) <= available
     """
     amount = Decimal(str(amount_kes))
+    if amount < Decimal(10) or amount > Decimal(250000):
+        return {
+            "can_withdraw": False,
+            "charge": 0,
+            "withdrawable": 0,
+        }
     available = Decimal(str(available)) if available else Decimal("0")
     tiers = [
         (Decimal("1"), Decimal("1500"), Decimal("12")),
