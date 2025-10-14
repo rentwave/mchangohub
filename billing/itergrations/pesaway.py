@@ -6,6 +6,8 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 
+from django.conf import settings
+
 
 class PaymentChannel(Enum):
     MPESA = "MPESA"
@@ -163,13 +165,14 @@ class PesaWayAPIClient:
             reason: str,
             results_url: str,
     ) -> APIResponse:
+        print(results_url)
         payload = {
             "ExternalReference": external_reference,
             "Amount": amount,
             "PhoneNumber": phone_number,
             "Channel": network,
             "Reason": reason,
-            "ResultsUrl": results_url,
+            "ResultsUrl": settings.PESAWAY_B2C_CALLBACK,
         }
         return self._make_request("POST", "/api/v1/mobile-money/send-payment/", payload)
 
@@ -182,13 +185,14 @@ class PesaWayAPIClient:
             reason: str,
             results_url: str,
     ) -> APIResponse:
+        print(results_url)
         payload = {
             "ExternalReference": external_reference,
             "Amount": amount,
             "PhoneNumber": phone_number,
             "Channel": network,
             "Reason": reason,
-            "ResultsUrl": results_url,
+            "ResultsUrl": settings.PESAWAY_C2B_CALLBACK
         }
         print("Receiving C2B Payment with payload:", payload)
         return self._make_request("POST", "/api/v1/mobile-money/receive-payment/", payload)

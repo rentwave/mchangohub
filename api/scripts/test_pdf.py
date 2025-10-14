@@ -40,7 +40,7 @@ def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
 
     # Withdrawable = what the user will actually receive
     withdrawable = (amount - charge).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
+    to_withdraw = round(available - charge, 2)
     # Fixed logic: must meet all 3 conditions
     can_withdraw = (
         amount > charge and
@@ -50,13 +50,13 @@ def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
 
     print(
         f"[DEBUG] Amount: {amount}, Charge: {charge}, Total Required: {amount + charge}, "
-        f"Available: {available}, Withdrawable: {withdrawable}, Allowed: {can_withdraw}"
+        f"Available: {available}, Withdrawable: {to_withdraw}, Allowed: {can_withdraw}"
     )
 
     return {
         "can_withdraw": can_withdraw,
         "charge": charge,
-        "withdrawable": withdrawable,
+        "withdrawable": to_withdraw,
     }
 
 # Test cases
