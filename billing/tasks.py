@@ -45,7 +45,7 @@ def check_transaction_status():
         }
         processed_count = 0
         time_gte = timezone.now() - timedelta(minutes=10)
-        time_lte = timezone.now() - timedelta(minutes=3)
+        time_lte = timezone.now() - timedelta(minutes=5)
         logger.info(f"Checking pending transactions created between {time_gte} and {time_lte}")
         for trx_type in ["topup", "payment"]:
             pending = service.filter(
