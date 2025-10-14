@@ -71,7 +71,7 @@ def check_pesaway_withdrawal_charges(amount_kes, wallet=None):
     else:
         raise ValueError("Amount exceeds maximum allowed for Pesaway charges")
     if wallet is not None:
-        if getattr(wallet, "available", 0) < amount_kes + charge:
+        if getattr(wallet, "available", 0) < Decimal(amount_kes) + Decimal(charge):
             return False
     return True
 
@@ -316,7 +316,7 @@ class BillingAdmin(View):
                         "Amount must be greater than zero",
                         status=400
                     )
-                charge = calculate_fair_charge(base_amount)
+                charge = 0
                 total_amount = base_amount + charge
             except (ValueError, TypeError):
                 return self.create_error_response(
