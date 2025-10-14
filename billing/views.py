@@ -43,38 +43,48 @@ class TransactionStatus:
     FAILED = 1
     PENDING = 2
 
+from decimal import Decimal, ROUND_HALF_UP
 
-def check_pesaway_withdrawal_charges(amount_kes, wallet=None):
+def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
     """
-    Check if a withdrawal can be made considering Pesaway charges.
+    Check if a withdrawal can be made considering Pesaway tiered charges.
 
-    Tiers:
-    1 - 1,500       -> 12
-    1,501 - 5,000   -> 19
-    5,001 - 10,000  -> 24
-    10,001 - 20,000 -> 33
-    20,001 - 250,000 -> 39
+    Charge Tiers (KES):
+        1 - 1,500         -> 12
+        1,501 - 5,000     -> 19
+        5,001 - 10,000    -> 24
+        10,001 - 20,000   -> 33
+        20,001 - 250,000  -> 39
 
     Returns:
-        True if wallet has sufficient balance to cover amount + charges, False otherwise.
+        dict with:
+            can_withdraw (bool)
+            charge (Decimal)
+            withdrawable (Decimal)
     """
-    if amount_kes <= 1500:
-        charge = 12
-    elif amount_kes <= 5000:
-        charge = 19
-    elif amount_kes <= 10000:
-        charge = 24
-    elif amount_kes <= 20000:
-        charge = 33
-    elif amount_kes <= 250000:
-        charge = 39
-    else:
-        charge = 0
-    WITHDRAWABLE = Decimal(amount_kes) + Decimal(charge)
-    print(WITHDRAWABLE)
-    if Decimal(wallet.available) < WITHDRAWABLE:
-        return False
-    return True
+    amount = Decimal(str(amount_kes))
+    tiers = [
+        (Decimal("1500"), Decimal("12")),
+        (Decimal("5000"), Decimal("19")),
+        (Decimal("10000"), Decimal("24")),
+        (Decimal("20000"), Decimal("33")),
+        (Decimal("250000"), Decimal("39")),
+    ]
+    charge = Decimal("0")
+    for limit, fee in tiers:
+        if amount <= limit:
+            charge = fee
+            break
+    available = Decimal(str(available)) if available else Decimal("0")
+    withdrawable = (amount - charge).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    can_withdraw = available >= withdrawable
+    print(f"[DEBUG] Withdrawable: {withdrawable}, Charge: {charge}, Available: {available}, Allowed: {can_withdraw}")
+    return {
+        "can_withdraw": can_withdraw,
+        "charge": charge,
+        "withdrawable": withdrawable,
+    }
+
 
 
 def calculate_fair_charge(amount_kes: float) -> float:
@@ -170,7 +180,7 @@ class BillingAdmin(View):
             logger.error(f"Failed to unpack request data: {str(e)}")
             raise
 
-    def create_error_response(self, error_code: str, message: str, status: int = 500, **extra_data):
+    def create_error_response(self, error_code: str, message, status: int = 500, **extra_data):
         """Create standardized error response"""
         response_data = {
             "code": error_code,
@@ -302,11 +312,13 @@ class BillingAdmin(View):
                     "Insufficient Funds",
                     status=400
                 )
-            can_withdraw = check_pesaway_withdrawal_charges(amount_kes=amount, wallet=wallet)
-            if not can_withdraw:
+
+            can_withdraw = check_pesaway_withdrawal_charges(amount_kes=amount, available=wallet.available)
+            print(can_withdraw)
+            if isinstance(can_withdraw, dict) and not can_withdraw.get("can_withdraw", False):
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
-                    "Insufficient Funds",
+                    message=can_withdraw,
                     status=400
                 )
             try:
