@@ -45,11 +45,11 @@ class TransactionStatus:
 
 
 def calculate_fair_charge(amount_kes: float) -> float:
-    """Calculate constant 3% charge with decimal precision"""
-    amount = Decimal(str(amount_kes))
-    rate = Decimal('0.03')  # 3%
-    charge = (amount * rate).quantize(Decimal('0.01'), rounding=ROUND_UP)
-    return float(charge)
+    """Calculate a 3% charge, minimum 15 KES if amount > 500"""
+    amount = Decimal(amount_kes)
+    if amount > 500:
+        return 15.0
+    return float((amount * Decimal('0.03')).quantize(Decimal('0.01'), rounding=ROUND_UP))
 
 
 def rate_limit(requests_per_minute: int = 1000):
