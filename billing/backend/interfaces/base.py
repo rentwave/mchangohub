@@ -200,7 +200,7 @@ class InterfaceBase(AuditManagementService):
 		try:
 			state_active = self._get_cached_state('Active')
 			kwargs.setdefault("state", state_active)
-			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
+			account = WalletAccount.objects.get(contribution=contribution)
 			if transaction_type == "CR":
 				transaction_history = account.initiate_topup(
 					amount=amount, reference=reference, description=description, charge=charge, receipt=receipt, amount_plus_charge=amount_plus_charge, actioned_by=actioned_by
@@ -221,7 +221,7 @@ class InterfaceBase(AuditManagementService):
 		"""Fail a particular transaction history"""
 		complete_state = self._get_cached_state("Completed")
 		try:
-			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
+			account = WalletAccount.objects.get(contribution=contribution)
 			transaction_obj = WalletTransaction.objects.get(pk=transaction_id)
 			if transaction_type == "CR":
 				account.topup_approved(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description, receipt=receipt,)
@@ -248,7 +248,7 @@ class InterfaceBase(AuditManagementService):
 		"""Fail a particular transaction history"""
 		failed_state = self._get_cached_state("Failed")
 		try:
-			account = WalletAccount.objects.select_for_update().get(contribution=contribution)
+			account = WalletAccount.objects.get(contribution=contribution)
 			transaction_obj = WalletTransaction.objects.get(pk=transaction_id)
 			if transaction_type == "CR":
 				account.topup_rejected(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
