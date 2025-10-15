@@ -1,70 +1,141 @@
-from decimal import Decimal, ROUND_HALF_UP
-
-def check_pesaway_withdrawal_charges(amount_kes: float, available=None):
-    """
-    Check if a withdrawal can be made considering Pesaway tiered charges.
-
-    Charge Tiers (KES):
-        1 - 1,500         -> 12
-        1,501 - 5,000     -> 19
-        5,001 - 10,000    -> 24
-        10,001 - 20,000   -> 33
-        20,001 - 250,000  -> 39
-
-    Rules:
-        - Find applicable charge based on amount.
-        - A withdrawal is allowed only if:
-            1. amount > charge
-            2. withdrawable > 0
-            3. (amount + charge) <= available
-    """
-    amount = Decimal(str(amount_kes))
-    available = Decimal(str(available)) if available else Decimal("0")
-
-    tiers = [
-        (Decimal("1"), Decimal("1500"), Decimal("12")),
-        (Decimal("1501"), Decimal("5000"), Decimal("19")),
-        (Decimal("5001"), Decimal("10000"), Decimal("24")),
-        (Decimal("10001"), Decimal("20000"), Decimal("33")),
-        (Decimal("20001"), Decimal("250000"), Decimal("39")),
-    ]
-
-    # Determine applicable charge
-    charge = Decimal("0")
-    for min_limit, max_limit, fee in tiers:
-        if min_limit <= amount <= max_limit:
-            charge = fee
-            break
-    if charge == 0:
-        charge = tiers[-1][2]
-
-    # Withdrawable = what the user will actually receive
-    withdrawable = (amount - charge).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    to_withdraw = round(available - charge, 2)
-    # Fixed logic: must meet all 3 conditions
-    can_withdraw = (
-        amount > charge and
-        withdrawable > 0 and
-        (amount + charge) <= available
-    )
-
-    print(
-        f"[DEBUG] Amount: {amount}, Charge: {charge}, Total Required: {amount + charge}, "
-        f"Available: {available}, Withdrawable: {to_withdraw}, Allowed: {can_withdraw}"
-    )
-
-    return {
-        "can_withdraw": can_withdraw,
-        "charge": charge,
-        "withdrawable": to_withdraw,
-    }
-
-# Test cases
-print("\nTest 1: amount=4, available=17")
-print(check_pesaway_withdrawal_charges(amount_kes=4, available=17))
-
-print("\nTest 2: amount=15, available=17")
-print(check_pesaway_withdrawal_charges(amount_kes=15, available=17))
-
-print("\nTest 3: amount=2000, available=2050")
-print(check_pesaway_withdrawal_charges(amount_kes=2040, available=2050))
+# QuerySet [<BalanceLogEntry: payment - 30.00 - A0H5NTKUYW1760541111 (Completed ) InitiatePayment : 30.00 Available  30.00>, <BalanceLogEntry: payment - 30.00 - A0H5NTKUYW1760541111 (Completed ) InitiatePayment : 30.00 Reserved  30.00>]>
+#
+# debit_account_current - ApprovePaymentTransaction  ApprovePaymentTransaction - Active
+#
+# 67.00
+#
+# debit_account_reserved - ApprovePaymentTransaction  ApprovePaymentTransaction - Active
+#
+# 0.00
+#
+# Results from ApprovePaymentTransaction: 0.00
+#
+# Transaction processing failed for reference A0H5NTKUYW1760541111: Unable to process the approved transaction
+#
+# Traceback (most recent call last):
+#
+#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 315, in post
+#
+#     raise Exception("Unable to process the approved transaction")
+#
+# Exception: Unable to process the approved transaction
+#
+# ApprovePaymentTransaction fail_transaction_history Exception: ['No pending topup transaction found for reference: A0H5NTKUYW1760541111']
+#
+# Traceback (most recent call last):
+#
+#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 315, in post
+#
+#     raise Exception("Unable to process the approved transaction")
+#
+# Exception: Unable to process the approved transaction
+#
+# During handling of the above exception, another exception occurred:
+#
+# Traceback (most recent call last):
+#
+#   File "/usr/src/app/billing/models.py", line 573, in topup_rejected
+#
+#     transaction_obj = WalletTransaction.objects.get(
+#
+#                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+#   File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
+#
+#     return getattr(self.get_queryset(), name)(*args, **kwargs)
+#
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+#   File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 633, in get
+#
+#     raise self.model.DoesNotExist(
+#
+# billing.models.WalletTransaction.DoesNotExist: WalletTransaction matching query does not exist.
+#
+# During handling of the above exception, another exception occurred:
+#
+# Traceback (most recent call last):
+#
+#   File "/usr/src/app/billing/backend/interfaces/base.py", line 254, in reject_transaction
+#
+#     account.topup_rejected(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
+#
+#   File "/usr/local/lib/python3.11/contextlib.py", line 81, in inner
+#
+#     return func(*args, **kwds)
+#
+#            ^^^^^^^^^^^^^^^^^^^
+#
+#   File "/usr/src/app/billing/models.py", line 580, in topup_rejected
+#
+#     raise ValidationError(f"No pending topup transaction found for reference: {reference}")
+#
+# django.core.exceptions.ValidationError: ['No pending topup transaction found for reference: A0H5NTKUYW1760541111']
+#
+# Failed to mark transaction as failed for reference A0H5NTKUYW1760541111: ApprovePaymentTransaction Could not fail the Transaction History. Server Error.
+#
+# Traceback (most recent call last):
+#
+# 172.20.0.1 - - [15/Oct/2025:18:12:42 +0300] "POST /api/billing/api/v1/callbacks/b2c/ HTTP/1.1" 200 326 "-" "python-requests/2.32.5"
+#
+#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 315, in post
+#
+#     raise Exception("Unable to process the approved transaction")
+#
+# Exception: Unable to process the approved transaction
+#
+# During handling of the above exception, another exception occurred:
+#
+# Traceback (most recent call last):
+#
+#   File "/usr/src/app/billing/models.py", line 573, in topup_rejected
+#
+#     transaction_obj = WalletTransaction.objects.get(
+#
+#                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+#   File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
+#
+#     return getattr(self.get_queryset(), name)(*args, **kwargs)
+#
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+#   File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 633, in get
+#
+#     raise self.model.DoesNotExist(
+#
+# billing.models.WalletTransaction.DoesNotExist: WalletTransaction matching query does not exist.
+#
+# During handling of the above exception, another exception occurred:
+#
+# Traceback (most recent call last):
+#
+#   File "/usr/src/app/billing/backend/interfaces/base.py", line 254, in reject_transaction
+#
+#     account.topup_rejected(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
+#
+#   File "/usr/local/lib/python3.11/contextlib.py", line 81, in inner
+#
+#     return func(*args, **kwds)
+#
+#            ^^^^^^^^^^^^^^^^^^^
+#
+#   File "/usr/src/app/billing/models.py", line 580, in topup_rejected
+#
+#     raise ValidationError(f"No pending topup transaction found for reference: {reference}")
+#
+# django.core.exceptions.ValidationError: ['No pending topup transaction found for reference: A0H5NTKUYW1760541111']
+#
+# During handling of the above exception, another exception occurred:
+#
+# Traceback (most recent call last):
+#
+#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 332, in post
+#
+#     self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type= "CR", description="Transaction failed")
+#
+#   File "/usr/src/app/billing/backend/interfaces/base.py", line 270, in reject_transaction
+#
+#     raise Exception('%s Could not fail the Transaction History. Server Error.' % self.__class__.__name__)
+#
+# Exception: ApprovePaymentTransaction Could not fail the Transaction History. Server Error.
