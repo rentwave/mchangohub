@@ -315,7 +315,8 @@ class BillingAdmin(View):
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
             contribution = ContributionService().get(alias=data.get('contribution'))
-            if request.user is not contribution.creator:
+            print(request.user)
+            if request.user != contribution.creator:
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
                     "Withdrawer must be Creator",
