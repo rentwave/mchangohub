@@ -13,7 +13,7 @@ from billing.backend.interfaces.topup import (
     ApproveTopupTransaction,
     RejectTopupTransaction,
 )
-from billing.integrations.pesaway import PesaWayAPIClient
+from billing.itergrations.pesaway import PesaWayAPIClient
 from billing.views import TransactionStatus
 
 logger = logging.getLogger(__name__)
