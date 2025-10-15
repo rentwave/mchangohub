@@ -366,7 +366,6 @@ class BillingAdmin(View):
                 reason=f"Withdrawal from contribution on {timezone.now()}",
                 results_url=settings.PESAWAY_B2C_CALLBACK
             )
-
             if not response.success or (response.data and response.data.get('code') != ErrorCodes.SUCCESS):
                 logger.error(f"B2C API call failed: {request_id}")
                 return self.create_error_response(
@@ -413,6 +412,7 @@ class BillingAdmin(View):
             result_desc = data.get("ResultDesc", "")
             if result_code == TransactionStatus.SUCCESS and "successfully" in result_desc.lower():
                 reference = data.get("OriginatorReference")
+                print(reference)
                 receipt = data.get("TransactionID")
                 if not reference or not receipt:
                     logger.error(f"Missing transaction details in callback: {request_id}")

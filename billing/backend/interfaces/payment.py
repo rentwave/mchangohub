@@ -238,7 +238,7 @@ class ApprovePaymentTransaction(InterfaceBase):
         try:
             return (
                 WalletTransactionService()
-                .filter(reference=reference)
+                .filter(reference=reference, status__name="Pending")
                 .order_by("-date_created")
                 .first()
             )
