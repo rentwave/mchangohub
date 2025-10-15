@@ -460,7 +460,7 @@ class BillingAdmin(View):
                 first_name = parts[0] if parts else "Anonymous"
                 last_name = parts[1] if len(parts) > 1 else "User"
                 role = RoleService().get(name="USER")
-                actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), first_name=first_name, last_name=last_name, role=role)
+                actioned_by = UserService().create(username=data.get('phone_number'), phone_number=data.get('phone_number'), is_active=False, first_name=first_name, last_name=last_name, role=role)
             amount_minus_charge = base_amount - charge
             receipt = response.data.get('TransactionID')
             topup_data = {**data, 'ref': reference, 'charge': charge, "amount": amount_minus_charge, "amount_plus_charge": base_amount,'receipt': receipt, 'actioned_by': actioned_by}
