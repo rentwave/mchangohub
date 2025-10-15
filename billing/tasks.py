@@ -31,7 +31,7 @@ def _get_pesaway_client():
 
 def _get_time_window():
     """Returns the lower and upper time bounds for reconciliation."""
-    time_upper = timezone.now() - timedelta(minutes=3)
+    time_upper = timezone.now() - timedelta(minutes=10)
     time_lower = timezone.now() - timedelta(days=15)
     return time_lower, time_upper
 
