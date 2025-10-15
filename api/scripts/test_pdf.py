@@ -1,141 +1,74 @@
-# QuerySet [<BalanceLogEntry: payment - 30.00 - A0H5NTKUYW1760541111 (Completed ) InitiatePayment : 30.00 Available  30.00>, <BalanceLogEntry: payment - 30.00 - A0H5NTKUYW1760541111 (Completed ) InitiatePayment : 30.00 Reserved  30.00>]>
-#
-# debit_account_current - ApprovePaymentTransaction  ApprovePaymentTransaction - Active
-#
-# 67.00
-#
-# debit_account_reserved - ApprovePaymentTransaction  ApprovePaymentTransaction - Active
-#
-# 0.00
-#
-# Results from ApprovePaymentTransaction: 0.00
-#
-# Transaction processing failed for reference A0H5NTKUYW1760541111: Unable to process the approved transaction
-#
-# Traceback (most recent call last):
-#
-#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 315, in post
-#
-#     raise Exception("Unable to process the approved transaction")
-#
-# Exception: Unable to process the approved transaction
-#
-# ApprovePaymentTransaction fail_transaction_history Exception: ['No pending topup transaction found for reference: A0H5NTKUYW1760541111']
-#
-# Traceback (most recent call last):
-#
-#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 315, in post
-#
-#     raise Exception("Unable to process the approved transaction")
-#
-# Exception: Unable to process the approved transaction
-#
-# During handling of the above exception, another exception occurred:
-#
-# Traceback (most recent call last):
-#
-#   File "/usr/src/app/billing/models.py", line 573, in topup_rejected
-#
-#     transaction_obj = WalletTransaction.objects.get(
-#
-#                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-#   File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
-#
-#     return getattr(self.get_queryset(), name)(*args, **kwargs)
-#
-#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-#   File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 633, in get
-#
-#     raise self.model.DoesNotExist(
-#
-# billing.models.WalletTransaction.DoesNotExist: WalletTransaction matching query does not exist.
-#
-# During handling of the above exception, another exception occurred:
-#
-# Traceback (most recent call last):
-#
-#   File "/usr/src/app/billing/backend/interfaces/base.py", line 254, in reject_transaction
-#
-#     account.topup_rejected(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
-#
-#   File "/usr/local/lib/python3.11/contextlib.py", line 81, in inner
-#
-#     return func(*args, **kwds)
-#
-#            ^^^^^^^^^^^^^^^^^^^
-#
-#   File "/usr/src/app/billing/models.py", line 580, in topup_rejected
-#
-#     raise ValidationError(f"No pending topup transaction found for reference: {reference}")
-#
-# django.core.exceptions.ValidationError: ['No pending topup transaction found for reference: A0H5NTKUYW1760541111']
-#
-# Failed to mark transaction as failed for reference A0H5NTKUYW1760541111: ApprovePaymentTransaction Could not fail the Transaction History. Server Error.
-#
-# Traceback (most recent call last):
-#
-# 172.20.0.1 - - [15/Oct/2025:18:12:42 +0300] "POST /api/billing/api/v1/callbacks/b2c/ HTTP/1.1" 200 326 "-" "python-requests/2.32.5"
-#
-#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 315, in post
-#
-#     raise Exception("Unable to process the approved transaction")
-#
-# Exception: Unable to process the approved transaction
-#
-# During handling of the above exception, another exception occurred:
-#
-# Traceback (most recent call last):
-#
-#   File "/usr/src/app/billing/models.py", line 573, in topup_rejected
-#
-#     transaction_obj = WalletTransaction.objects.get(
-#
-#                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-#   File "/usr/local/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
-#
-#     return getattr(self.get_queryset(), name)(*args, **kwargs)
-#
-#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-#   File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 633, in get
-#
-#     raise self.model.DoesNotExist(
-#
-# billing.models.WalletTransaction.DoesNotExist: WalletTransaction matching query does not exist.
-#
-# During handling of the above exception, another exception occurred:
-#
-# Traceback (most recent call last):
-#
-#   File "/usr/src/app/billing/backend/interfaces/base.py", line 254, in reject_transaction
-#
-#     account.topup_rejected(amount=transaction_obj.amount, reference=transaction_obj.reference, description=description)
-#
-#   File "/usr/local/lib/python3.11/contextlib.py", line 81, in inner
-#
-#     return func(*args, **kwds)
-#
-#            ^^^^^^^^^^^^^^^^^^^
-#
-#   File "/usr/src/app/billing/models.py", line 580, in topup_rejected
-#
-#     raise ValidationError(f"No pending topup transaction found for reference: {reference}")
-#
-# django.core.exceptions.ValidationError: ['No pending topup transaction found for reference: A0H5NTKUYW1760541111']
-#
-# During handling of the above exception, another exception occurred:
-#
-# Traceback (most recent call last):
-#
-#   File "/usr/src/app/billing/backend/interfaces/payment.py", line 332, in post
-#
-#     self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type= "CR", description="Transaction failed")
-#
-#   File "/usr/src/app/billing/backend/interfaces/base.py", line 270, in reject_transaction
-#
-#     raise Exception('%s Could not fail the Transaction History. Server Error.' % self.__class__.__name__)
-#
-# Exception: ApprovePaymentTransaction Could not fail the Transaction History. Server Error.
+from datetime import timedelta
+from django.conf import settings
+from django.utils import timezone
+from base.backend.service import WalletTransactionService
+from billing.backend.interfaces.payment import RejectPaymentTransaction, ApprovePaymentTransaction
+from billing.backend.interfaces.topup import RejectTopupTransaction, ApproveTopupTransaction
+from billing.itergrations.pesaway import PesaWayAPIClient
+from billing.views import TransactionStatus
+client = PesaWayAPIClient(
+    client_id=settings.PESAWAY_CLIENT_ID,
+    client_secret=settings.PESAWAY_CLIENT_SECRET,
+    base_url=getattr(settings, "PESAWAY_BASE_URL", "https://api.pesaway.com"),
+    timeout=getattr(settings, "PESAWAY_TIMEOUT", 30),
+)
+service = WalletTransactionService()
+processed_count = 0
+processors = {
+    "approve": {
+        "topup": ApproveTopupTransaction(),
+        "payment": ApprovePaymentTransaction(),
+    },
+    "reject": {
+        "topup": RejectTopupTransaction(),
+        "payment": RejectPaymentTransaction(),
+    },
+}
+time_upper = timezone.now() - timedelta(minutes=3)
+time_lower = timezone.now() - timedelta(days=15)
+print(f"Checking pending transactions created between {time_lower} and {time_upper}")
+for trx_type in ["topup", "payment"]:
+    pending_transactions = service.filter(
+        status__name="Pending",
+        transaction_type=trx_type,
+        date_created__gte=time_lower,
+        date_created__lte=time_upper,
+    )
+    print(pending_transactions)
+    if not pending_transactions:
+        print(f"No pending {trx_type} transactions found in the time window.")
+        continue
+    for trx in pending_transactions:
+        print(trx)
+        try:
+            response = client.query_mobile_money_transaction(
+                transaction_reference=trx.receipt_number
+            )
+            data = getattr(response, "data", None) or response.data
+            result_code = data.get("ResultCode")
+            result_desc = str(data.get("ResultDesc", "")).lower()
+            reference = data.get("OriginatorReference")
+            receipt = data.get("TransactionID")
+            if not reference or not receipt:
+                print(f"{trx_type} {trx.id} missing reference/receipt → {data}")
+                continue
+            if trx.status.name.lower() != "pending":
+                print(f"Skipping {trx_type} {trx.id} — already processed")
+                continue
+            if result_code == TransactionStatus.SUCCESS and "success" in result_desc:
+                processor = processors["approve"][trx_type]
+                action = "approved"
+            elif result_code == TransactionStatus.FAILED or "fail" in result_desc:
+                processor = processors["reject"][trx_type]
+                action = "rejected"
+            else:
+                print(f"{trx_type} {trx.id} still pending → {result_desc}")
+                continue  # still pending, skip
+            result = processor.post(request=None, reference=reference, receipt=receipt)
+            processed_count += 1
+            print(f"{trx_type.capitalize()} {action}: {trx.id} → {result}")
+        except Exception as err:
+            print(
+                f"Error processing {trx_type} transaction {trx.id}: {err}",
+            )
+print(f"Transaction status check complete → {processed_count} processed successfully")

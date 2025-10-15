@@ -726,14 +726,17 @@ class WalletAccount(BaseModel):
         state_completed = State.objects.get(name='Completed')
         try:
             transaction_obj = WalletTransaction.objects.get(
+                wallet_account=account,
                 reference=reference,
                 transaction_type='payment',
                 status=state_pending
             )
         except WalletTransaction.DoesNotExist:
             raise ValidationError(f"No pending payment transaction found for reference: {reference}")
+
         if account.reserved < amount:
             raise ValidationError(f"Cannot approve {amount}. Reserved balance: {account.reserved}")
+
         if account.current < amount:
             raise ValidationError(f"Cannot approve {amount}. Current balance: {account.current}")
 
