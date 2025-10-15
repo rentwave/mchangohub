@@ -74,7 +74,7 @@ def check_transaction_status():
                         transaction_reference=trx.receipt_number
                     )
 
-                    data = getattr(response, "data", None) or response.json()
+                    data = getattr(response, "data", None) or response.data
                     result_code = data.get("ResultCode")
                     result_desc = str(data.get("ResultDesc", "")).lower()
                     reference = data.get("OriginatorReference")
