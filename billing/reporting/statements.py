@@ -22,17 +22,17 @@ def generate_mpesa_statement_pdf(
 		filename: Optional[str] = None,
 ) -> str:
 	"""
-    Generate an MPESA-like statement as PDF with a styled header in purple and green.
-    transactions: list of dicts with keys:
-        - timestamp: datetime
-        - type: str
-        - narration: str
-        - reference: str
-        - counterparty: Optional[str]
-        - paid_in: Decimal/float
-        - withdrawn: Decimal/float
-        - charge: Decimal/float
-    """
+	Generate an MPESA-like statement as PDF with a styled header in purple and green.
+	transactions: list of dicts with keys:
+		- timestamp: datetime
+		- type: str
+		- narration: str
+		- reference: str
+		- counterparty: Optional[str]
+		- paid_in: Decimal/float
+		- withdrawn: Decimal/float
+		- charge: Decimal/float
+	"""
 
 	temp_dir = os.path.join(settings.BASE_DIR, "temp")
 	os.makedirs(temp_dir, exist_ok=True)
