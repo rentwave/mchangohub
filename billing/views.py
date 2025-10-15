@@ -23,6 +23,7 @@ from billing.itergrations.pesaway import PesaWayAPIClient
 from billing.models import Pledge
 from contributions.backend.services import ContributionService
 from users.backend.services import UserService, RoleService
+from utils.request_handler import request_handler
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +305,7 @@ class BillingAdmin(View):
     @method_decorator(require_http_methods(["POST"]))
     @rate_limit(100)
     @validate_request_data(['amount', 'phone_number', 'contribution'])
+    @request_handler(audit=True)
     def b2c_transfer(self, request):
         """B2C transfer (business to customer)"""
         request_id = str(uuid.uuid4())
@@ -313,6 +315,12 @@ class BillingAdmin(View):
             base_reference = TransactionRefGenerator().generate()
             reference = f"{base_reference}{int(time.time())}"
             contribution = ContributionService().get(alias=data.get('contribution'))
+            if request.user is not contribution.creator:
+                return self.create_error_response(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "Withdrawer must be Creator",
+                    status=400
+                )
             network = data.get('network', "MPESA")
             amount = data.get("amount", 0)
             wallet = WalletAccountService().get(contribution=contribution)
