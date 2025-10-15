@@ -58,15 +58,13 @@ def _process_pending_transactions(transactions, trx_type, client, approve_handle
                 logger.info(f"Skipping {trx_type} {trx.id} — already processed")
                 continue
 
-            if result_code == TransactionStatus.SUCCESS and "success" in result_desc:
+            if result_code == TransactionStatus.SUCCESS:
                 result = approve_handler.post(request=None, reference=reference, receipt=receipt)
                 logger.info(f"{trx_type.capitalize()} approved: {trx.id} → {result}")
-            elif result_code == TransactionStatus.FAILED or "fail" in result_desc:
+            else:
                 result = reject_handler.post(request=None, reference=reference, receipt=receipt)
                 logger.info(f"{trx_type.capitalize()} rejected: {trx.id} → {result}")
-            else:
-                logger.info(f"{trx_type} {trx.id} still pending → {result_desc}")
-                continue
+
 
             processed_count += 1
 
