@@ -157,14 +157,14 @@ class InitiatePayment(InterfaceBase):
                     )
                     if not payment_result:
                         self.reject_transaction(transaction_id=transaction_history.id,
-                                                contribution=account.contribution, transaction_type="CR",
+                                                contribution=account.contribution, transaction_type="DR",
                                                 description="Transaction failed")
                         return self.ERROR_CODES['TRANSACTION_EXECUTION_FAILED']
                 except Exception as e:
                     log.exception("Failed to execute transaction: %s", e)
                     if transaction_history:
                         self.reject_transaction(transaction_id=transaction_history.id,
-                                                contribution=account.contribution, transaction_type="CR",
+                                                contribution=account.contribution, transaction_type="DR",
                                                 description="Transaction failed")
                     return self.ERROR_CODES['TRANSACTION_EXECUTION_FAILED']
                 log.info(
@@ -185,7 +185,7 @@ class InitiatePayment(InterfaceBase):
             if transaction_history:
                 try:
                     self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution,
-                                            transaction_type="CR", description="Transaction failed")
+                                            transaction_type="DR", description="Transaction failed")
                 except Exception as cleanup_error:
                     log.exception("Failed to cleanup failed transaction: %s", cleanup_error)
             return self.ERROR_CODES['TRANSACTION_FAILED']
@@ -329,7 +329,7 @@ class ApprovePaymentTransaction(InterfaceBase):
                 log.exception("Transaction processing failed for reference %s: %s",reference, transaction_error)
                 try:
                     if hasattr(transaction_history, "id"):
-                        self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type= "CR", description="Transaction failed")
+                        self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type= "DR", description="Transaction failed")
                 except Exception as fail_error:
                     log.exception( "Failed to mark transaction as failed for reference %s: %s",reference, fail_error)
                 return {"code": "300.007", "message": f"Transaction processing failed: {str(transaction_error)}"}
@@ -442,7 +442,7 @@ class RejectPaymentTransaction(InterfaceBase):
                 log.exception("Transaction processing failed for reference %s: %s",reference, transaction_error)
                 try:
                     if hasattr(transaction_history, "id"):
-                        self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type= "CR", description="Transaction failed")
+                        self.reject_transaction(transaction_id=transaction_history.id, contribution=account.contribution, transaction_type= "DR", description="Transaction failed")
                 except Exception as fail_error:
                     log.exception( "Failed to mark transaction as failed for reference %s: %s",reference, fail_error)
                 return {"code": "300.007", "message": f"Transaction processing failed: {str(transaction_error)}"}
