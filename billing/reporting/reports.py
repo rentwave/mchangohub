@@ -117,7 +117,7 @@ class StatementGenerator:
                 "counterparty": trx.metadata.get("counterparty",
                                                  "Mobile Money") if trx.metadata else "Mobile Money",
                 "paid_in": float(trx.amount_plus_charge) if trx.transaction_type.lower() == "topup" else 0.0,
-                "withdrawn": float(trx.amount_plus_charge) if trx.transaction_type.lower() == "payment" else 0.0,
+                "withdrawn": float(trx.amount) if trx.transaction_type.lower() == "payment" else 0.0,
                 "charge": float(trx.charge or 0),
             }
             for trx in transactions
