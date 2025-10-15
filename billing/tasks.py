@@ -3,6 +3,7 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 from django.conf import settings
+
 from base.backend.service import WalletTransactionService
 from billing.backend.interfaces.payment import (
     ApprovePaymentTransaction,
@@ -13,6 +14,7 @@ from billing.backend.interfaces.topup import (
     RejectTopupTransaction,
 )
 from billing.itergrations.pesaway import PesaWayAPIClient
+from billing.backend.helpers import TransactionStatus  # assuming you defined SUCCESS=0, FAILED=1, etc.
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +22,10 @@ logger = logging.getLogger(__name__)
 @shared_task
 def check_transaction_status():
     """
-    Periodically checks and processes pending transactions (topup & payment).
-    Approves successful ones, rejects failed ones.
+    Periodically checks 'Pending' topup & payment transactions and reconciles them with PesaWay.
+    - Approves successful ones.
+    - Rejects failed ones.
+    - Skips already processed.
     """
     try:
         client = PesaWayAPIClient(
@@ -32,7 +36,9 @@ def check_transaction_status():
         )
 
         service = WalletTransactionService()
+        processed_count = 0
 
+        # Define transaction processors
         processors = {
             "approve": {
                 "topup": ApproveTopupTransaction(),
@@ -43,45 +49,70 @@ def check_transaction_status():
                 "payment": RejectPaymentTransaction(),
             },
         }
-        processed_count = 0
-        time_gte = timezone.now() - timedelta(minutes=10)
-        time_lte = timezone.now() - timedelta(minutes=5)
-        logger.info(f"Checking pending transactions created between {time_gte} and {time_lte}")
+
+        # Check transactions pending for 5–15 minutes
+        time_upper = timezone.now() - timedelta(minutes=3)
+        time_lower = timezone.now() - timedelta(minutes=15)
+        logger.info(f"Checking pending transactions created between {time_lower} and {time_upper}")
+
+        # Iterate through topups and payments
         for trx_type in ["topup", "payment"]:
-            pending = service.filter(
+            pending_transactions = service.filter(
                 status__name="Pending",
                 transaction_type=trx_type,
-                date_created__gte=time_gte,
-                date_created__lte=time_lte,
+                date_created__gte=time_lower,
+                date_created__lte=time_upper,
             )
-            for trx in pending:
+
+            if not pending_transactions:
+                logger.info(f"No pending {trx_type} transactions found in the time window.")
+                continue
+
+            for trx in pending_transactions:
                 try:
                     response = client.query_mobile_money_transaction(
                         transaction_reference=trx.receipt_number
                     )
+
                     data = getattr(response, "data", None) or response.json()
                     result_code = data.get("ResultCode")
-                    result_desc = data.get("ResultDesc", "").lower()
+                    result_desc = str(data.get("ResultDesc", "")).lower()
                     reference = data.get("OriginatorReference")
                     receipt = data.get("TransactionID")
 
                     if not reference or not receipt:
                         logger.warning(f"{trx_type} {trx.id} missing reference/receipt → {data}")
                         continue
-                    if result_code == 0:
+
+                    # Skip already processed ones
+                    if trx.status.name.lower() != "pending":
+                        logger.info(f"Skipping {trx_type} {trx.id} — already processed")
+                        continue
+
+                    # Determine outcome
+                    if result_code == TransactionStatus.SUCCESS and "success" in result_desc:
                         processor = processors["approve"][trx_type]
                         action = "approved"
-                    else:
+                    elif result_code == TransactionStatus.FAILED or "fail" in result_desc:
                         processor = processors["reject"][trx_type]
                         action = "rejected"
+                    else:
+                        logger.info(f"{trx_type} {trx.id} still pending → {result_desc}")
+                        continue  # still pending, skip
+
+                    # Execute action
                     result = processor.post(request=None, reference=reference, receipt=receipt)
                     processed_count += 1
+
                     logger.info(f"{trx_type.capitalize()} {action}: {trx.id} → {result}")
+
                 except Exception as err:
-                    logger.error(f"Failed to process {trx_type} transaction {trx.id}: {err}", exc_info=True)
-        logger.info(f"Transaction status check completed → {processed_count} processed")
+                    logger.error(
+                        f"Error processing {trx_type} transaction {trx.id}: {err}",
+                        exc_info=True,
+                    )
+        logger.info(f"Transaction status check complete → {processed_count} processed successfully")
         return {"success": True, "processed": processed_count}
     except Exception as e:
-        logger.exception("Unexpected error while checking transactions")
+        logger.exception("Unexpected error in transaction status checker")
         return {"success": False, "message": str(e)}
-
