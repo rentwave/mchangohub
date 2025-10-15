@@ -61,10 +61,21 @@ class Contribution(GenericBaseModel):
             transaction_type='topup'
         )
 
+    def _payment_transactions(self):
+        """Base queryset for contribution transactions."""
+        WalletTransaction = apps.get_model('billing', 'WalletTransaction')
+        return WalletTransaction.objects.filter(
+            wallet_account__contribution=self,
+            status__name="Completed",
+            transaction_type='payment'
+        )
+
     @property
     def total_contributed(self) -> Decimal:
         """Total amount contributed so far."""
-        return self._transactions().aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        topups = self._transactions().aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        payments = self._payment_transactions().aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        return topups - payments
 
     @property
     def balance(self) -> Decimal:
