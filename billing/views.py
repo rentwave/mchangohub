@@ -339,8 +339,8 @@ class BillingAdmin(View):
                         "Amount must be greater than zero",
                         status=400
                     )
-                charge = 0
-                total_amount = base_amount + charge
+                charge = can_withdraw.get("charge")
+                total_amount = round(float(base_amount), 2) + round(float(charge), 2)
             except (ValueError, TypeError):
                 return self.create_error_response(
                     ErrorCodes.VALIDATION_ERROR,
@@ -368,7 +368,7 @@ class BillingAdmin(View):
             data['receipt'] = receipt
             data['amount'] = base_amount
             data['amount_plus_charge'] = total_amount
-            payment_data = {**data, 'ref': reference, 'charge': charge}
+            payment_data = {**data, 'ref': reference, 'charge': round(float(charge), 2)}
             payment = InitiatePayment().post(
                 contribution_id=str(contribution.id), **payment_data
             )
