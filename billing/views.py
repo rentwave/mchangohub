@@ -305,7 +305,7 @@ class BillingAdmin(View):
     @method_decorator(require_http_methods(["POST"]))
     @rate_limit(100)
     @validate_request_data(['amount', 'phone_number', 'contribution'])
-    # @request_handler(audit=True)
+    @request_handler(audit=True)
     def b2c_transfer(self, request):
         """B2C transfer (business to customer)"""
         request_id = str(uuid.uuid4())
