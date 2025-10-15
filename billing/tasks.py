@@ -14,7 +14,7 @@ from billing.backend.interfaces.topup import (
     RejectTopupTransaction,
 )
 from billing.itergrations.pesaway import PesaWayAPIClient
-from billing.backend.helpers import TransactionStatus  # assuming you defined SUCCESS=0, FAILED=1, etc.
+from billing.views import TransactionStatus
 
 logger = logging.getLogger(__name__)
 
