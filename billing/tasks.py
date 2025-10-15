@@ -52,7 +52,7 @@ def check_transaction_status():
 
         # Check transactions pending for 5–15 minutes
         time_upper = timezone.now() - timedelta(minutes=3)
-        time_lower = timezone.now() - timedelta(minutes=15)
+        time_lower = timezone.now() - timedelta(days=15)
         logger.info(f"Checking pending transactions created between {time_lower} and {time_upper}")
 
         # Iterate through topups and payments
