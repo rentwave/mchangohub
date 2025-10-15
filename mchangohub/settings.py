@@ -236,12 +236,3 @@ PESAWAY_C2B_CALLBACK = "https://api.mchangohub.com/api/billing/api/v1/callbacks/
 DATA_UPLOAD_MAX_MEMORY_SIZE = 30 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 30 * 1024 * 1024
 
-
-from celery.schedules import timedelta
-
-CELERY_BEAT_SCHEDULE = {
-    "check_transaction_status_every_10_seconds": {
-        "task": "billing.tasks.check_transaction_status",
-        "schedule": timedelta(seconds=10),
-    },
-}
