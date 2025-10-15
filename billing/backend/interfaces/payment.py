@@ -311,7 +311,7 @@ class ApprovePaymentTransaction(InterfaceBase):
                         reference=reference,
                         description=description,
                     )
-                    if not approval_result:
+                    if approval_result is None:
                         raise Exception("Unable to process the approved transaction")
                     log.info(
                         "Successfully approved transaction %s for contribution %s with amount %s",

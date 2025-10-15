@@ -172,7 +172,6 @@ class InterfaceBase(AuditManagementService):
 		except Exception as e:
 			log.exception('%s execute: Transaction failed: %s', self.__class__.__name__, e)
 			raise
-		
 		return results
 	
 	def post(self, **kwargs) -> Any:
