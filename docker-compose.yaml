@@ -111,6 +111,49 @@ services:
       - PESAWAY_BASE_URL=https://api.pesaway.com
       - PESAWAY_B2C_CALLBACK=https://mchangohub.com/api/billing/api/v1/callbacks/b2c/
       - PESAWAY_C2B_CALLBACK=https://mchangohub.com/api/billing/api/v1/callbacks/c2b/
+  
+  celery_beat_mchango:
+    image: osiru/mchangohub:${BACKEND_TAG}
+    container_name: celery_beat_mchango
+    working_dir: /usr/src/app
+    command: celery -A mchangohub beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/usr/src/app
+      - /srv/documents:/srv/documents
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - mchango_hub_net
+    restart: unless-stopped
+    environment:
+      - ENV=production
+      - DEBUG=0
+      - DJANGO_SECRET_KEY=django-insecure-fmq&5@^#yv*$lmqc8o+q(_#v)_9n#&u*_=lwz+=ty^@)6b@v=m
+      - USE_S3=0
+      - ALLOWED_HOST=*
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - DB_IGNORE_SSL=true
+      - REDIS_URL=redis://redis:6379/0
+      - PESAWAY_CALLBACK_SIGNATURE_KEY=FUy9106[8XLLF+5732_00u2YC:Y_V2dX
+      - PESAWAY_CLIENT_SECRET=j05u011Z?{@{G7u5
+      - PESAWAY_CLIENT_ID=KX!?y#MHg6Y67J!jh[z73J8+pPc6{fyn
+      - PESAWAY_BASE_URL=https://api.pesaway.com
+      - PESAWAY_B2C_CALLBACK=https://mchangohub.com/api/billing/api/v1/callbacks/b2c/
+      - PESAWAY_C2B_CALLBACK=https://mchangohub.com/api/billing/api/v1/callbacks/c2b/
+    
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+        reservations:
+          memory: 128m
+
 
 volumes:
   mchango_hub_pg:
