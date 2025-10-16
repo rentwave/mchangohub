@@ -657,6 +657,7 @@ class WalletAccount(BaseModel):
         amount = Decimal(str(amount))
         if account.available < amount:
             raise ValidationError(f"Insufficient available balance. Available: {account.available}")
+        amount = amount + charge
         old_available = account.available
         old_reserved = account.reserved
         account.available -= amount
