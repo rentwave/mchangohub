@@ -733,7 +733,8 @@ class WalletAccount(BaseModel):
             )
         except WalletTransaction.DoesNotExist:
             raise ValidationError(f"No pending payment transaction found for reference: {reference}")
-
+        charge = transaction_obj.charge or Decimal('0.00')
+        amount = amount + charge
         if account.reserved < amount:
             raise ValidationError(f"Cannot approve {amount}. Reserved balance: {account.reserved}")
 
@@ -759,7 +760,6 @@ class WalletAccount(BaseModel):
             'current_after_approval': str(account.current),
         })
         transaction_obj.save()
-        charge = transaction_obj.charge or Decimal('0.00')
         actions = [
             {
                 'action_type': WorkflowActionType.MONEY_FROM_RESERVED,
