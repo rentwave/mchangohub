@@ -655,6 +655,7 @@ class WalletAccount(BaseModel):
             raise ValidationError("Account is frozen")
         state = State.objects.get(name='Pending')
         amount = Decimal(str(amount))
+
         if account.available < amount:
             raise ValidationError(f"Insufficient available balance. Available: {account.available}")
         amount = amount + charge
