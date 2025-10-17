@@ -1,8 +1,7 @@
 from decimal import Decimal
-
 from billing.models import WalletAccount
-
-for a in WalletAccount.objects.filter(available__gt=Decimal()):
+print(WalletAccount.objects.filter(available__gte=Decimal()))
+for a in WalletAccount.objects.filter(available__gte=Decimal()):
 	a.available = Decimal()
 	a.current = Decimal()
 	a.reserved = Decimal()
