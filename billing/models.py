@@ -657,11 +657,10 @@ class WalletAccount(BaseModel):
         amount = Decimal(str(amount))
         if account.available < amount:
             raise ValidationError(f"Insufficient available balance. Available: {account.available}")
-        amount = Decimal(amount) + Decimal(charge)
         old_available = account.available
         old_reserved = account.reserved
-        account.available -= amount
-        account.reserved += amount
+        account.available -= amount_plus_charge
+        account.reserved += amount_plus_charge
         account.last_transaction_date = timezone.now()
         account.save()
         transaction_obj = WalletTransaction.objects.create(
@@ -689,24 +688,24 @@ class WalletAccount(BaseModel):
         actions = [
             {
                 'action_type': WorkflowActionType.MONEY_FROM_AVAILABLE,
-                'amount': amount,
+                'amount': amount_plus_charge,
                 'balance_before': old_available,
                 'balance_after': account.available,
                 'workflow_step': 'initiate_payment',
-                'description': f'Deducted {amount} from available balance',
+                'description': f'Deducted {amount_plus_charge} from available balance',
             },
             {
                 'action_type': WorkflowActionType.MONEY_TO_RESERVED,
-                'amount': amount,
+                'amount': amount_plus_charge,
                 'balance_before': old_reserved,
                 'balance_after': account.reserved,
                 'workflow_step': 'initiate_payment',
-                'description': f'Added {amount} to reserved balance',
+                'description': f'Added {amount_plus_charge} to reserved balance',
             }
         ]
 
         self._log_workflow_actions(transaction_obj, actions)
-        logger.info(f"Payment pending: {amount} reserved in account {self.account_number}")
+        logger.info(f"Payment pending: {amount_plus_charge} reserved in account {self.account_number}")
         return transaction_obj
 
 
@@ -720,7 +719,6 @@ class WalletAccount(BaseModel):
         """
         if amount <= 0:
             raise ValidationError("Approval amount must be positive")
-
         account = WalletAccount.objects.select_for_update().get(pk=self.pk)
         amount = Decimal(str(amount))
         state_pending = State.objects.get(name='Pending')
@@ -734,18 +732,17 @@ class WalletAccount(BaseModel):
             )
         except WalletTransaction.DoesNotExist:
             raise ValidationError(f"No pending payment transaction found for reference: {reference}")
-        charge = transaction_obj.charge or Decimal('0.00')
-        amount = Decimal(amount) + Decimal(charge)
         if account.reserved < amount:
             raise ValidationError(f"Cannot approve {amount}. Reserved balance: {account.reserved}")
 
         if account.current < amount:
             raise ValidationError(f"Cannot approve {amount}. Current balance: {account.current}")
-
+        charge = Decimal(transaction_obj.charge)
+        amount_plus_charge = charge + Decimal(amount)
         old_current = account.current
         old_reserved = account.reserved
-        account.reserved -= amount
-        account.current -= amount
+        account.reserved -= amount_plus_charge
+        account.current -= amount_plus_charge
         account.last_transaction_date = timezone.now()
         account.save()
         transaction_obj.status = state_completed
@@ -764,24 +761,24 @@ class WalletAccount(BaseModel):
         actions = [
             {
                 'action_type': WorkflowActionType.MONEY_FROM_RESERVED,
-                'amount': amount,
+                'amount': amount_plus_charge,
                 'balance_before': old_reserved,
                 'balance_after': account.reserved,
                 'workflow_step': 'payment_approved',
-                'description': f'Deducted {amount} from reserved balance',
+                'description': f'Deducted {amount_plus_charge} from reserved balance',
             },
             {
                 'action_type': WorkflowActionType.MONEY_FROM_CURRENT,
-                'amount': amount,
+                'amount': amount_plus_charge,
                 'balance_before': old_current,
                 'balance_after': account.current,
                 'workflow_step': 'payment_approved',
-                'description': f'Deducted {amount} from current balance',
+                'description': f'Deducted {amount_plus_charge} from current balance',
             }
         ]
 
         self._log_workflow_actions(transaction_obj, actions)
-        logger.info(f"Payment approved: {amount} deducted from account {self.account_number}")
+        logger.info(f"Payment approved: {amount_plus_charge} deducted from account {self.account_number}")
         return transaction_obj
 
     @transaction.atomic
