@@ -655,10 +655,9 @@ class WalletAccount(BaseModel):
             raise ValidationError("Account is frozen")
         state = State.objects.get(name='Pending')
         amount = Decimal(str(amount))
-
         if account.available < amount:
             raise ValidationError(f"Insufficient available balance. Available: {account.available}")
-        amount = amount + charge
+        amount = Decimal(amount) + Decimal(charge)
         old_available = account.available
         old_reserved = account.reserved
         account.available -= amount
@@ -736,7 +735,7 @@ class WalletAccount(BaseModel):
         except WalletTransaction.DoesNotExist:
             raise ValidationError(f"No pending payment transaction found for reference: {reference}")
         charge = transaction_obj.charge or Decimal('0.00')
-        amount = amount + charge
+        amount = Decimal(amount) + Decimal(charge)
         if account.reserved < amount:
             raise ValidationError(f"Cannot approve {amount}. Reserved balance: {account.reserved}")
 
