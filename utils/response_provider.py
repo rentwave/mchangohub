@@ -16,13 +16,13 @@ class ResponseProvider:
     @classmethod
     def handle_exception(cls, ex: Exception) -> JsonResponse:
         if isinstance(ex, ValidationError):
-            return cls.bad_request('Validation error', error=str(ex))
+            return cls.bad_request(message='Validation Error', error=str(ex))
         elif isinstance(ex, ObjectDoesNotExist):
-            return cls.not_found('Resource not found', error=str(ex))
+            return cls.not_found(error=str(ex))
         elif isinstance(ex, PermissionDenied):
-            return cls.forbidden('Forbidden', error='You do not have permission to perform this action.')
+            return cls.forbidden(error=str(ex))
         else:
-            return cls.server_error('Internal server error', error=str(ex))
+            return cls.server_error(error=str(ex))
 
     @classmethod
     def success(cls, code='200.000', message='Success', data=None):
@@ -49,7 +49,7 @@ class ResponseProvider:
         return cls._response(False, code, message, 403, error=error)
 
     @classmethod
-    def not_found(cls, code="404.000", message='Not Found', error=None):
+    def not_found(cls, code="404.000", message='Resource Not Found', error=None):
         return cls._response(False, code, message, 404, error=error)
 
     @classmethod
