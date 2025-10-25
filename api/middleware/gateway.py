@@ -51,85 +51,67 @@ class GatewayControlMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        try:
-            if request.path.startswith("/api/"):
-                request._dont_enforce_csrf_checks = True
+        if request.path.startswith("/api/"):
+            request._dont_enforce_csrf_checks = True
 
-            self.ENCRYPTED = request.headers.get(self.ENCRYPTED_HEADER) == "1"
-            if self.ENCRYPTED:
-                request = self._decrypt_request_body(request)
+        self.ENCRYPTED = request.headers.get(self.ENCRYPTED_HEADER) == "1"
+        if self.ENCRYPTED:
+            request = self._decrypt_request_body(request)
 
-            self._set_request_metadata(request)
+        self._set_request_metadata(request)
 
-            RequestContext.set(
-                request=request,
-                user=request.user if not isinstance(request.user, AnonymousUser) else None,
-                token=request.token,
-                is_authenticated=request.is_authenticated,
-                ip_address=request.client_ip,
-                user_agent=request.user_agent,
-                request_id=str(uuid.uuid4()),
-                request_data=request.data,
-                session_key=getattr(request.session, 'session_key', None),
-                request_method=request.method,
-                request_path=request.path,
-                is_secure=request.is_secure(),
-                started_at=timezone.now(),
-            )
+        RequestContext.set(
+            request=request,
+            user=request.user if not isinstance(request.user, AnonymousUser) else None,
+            token=request.token,
+            is_authenticated=request.is_authenticated,
+            ip_address=request.client_ip,
+            user_agent=request.user_agent,
+            request_id=str(uuid.uuid4()),
+            request_data=request.data,
+            session_key=getattr(request.session, 'session_key', None),
+            request_method=request.method,
+            request_path=request.path,
+            is_secure=request.is_secure(),
+            started_at=timezone.now(),
+        )
 
-            print(RequestContext.get())
+        print(RequestContext.get())
 
-            # missing = [h for h in self.REQUIRED_HEADERS if h not in request.headers]
-            # if missing:
-            #     response = JsonResponse(
-            #         {"error": f"Missing required headers: {', '.join(missing)}"},
-            #         status=400
-            #     )
-            #     return self._process_response(request, response)
+        # missing = [h for h in self.REQUIRED_HEADERS if h not in request.headers]
+        # if missing:
+        #     response = JsonResponse(
+        #         {"error": f"Missing required headers: {', '.join(missing)}"},
+        #         status=400
+        #     )
+        #     return self._process_response(request, response)
 
-            response = self._validate_api_client(request)
-            RequestContext.update(api_client=request.api_client)
-            if response:
-                return self._process_response(request, response)
+        response = self._validate_api_client(request)
+        RequestContext.update(api_client=request.api_client)
+        if response:
+            return self._process_response(request, response)
 
-            response = self._verify_signature_if_present(request)
-            if response:
-                return self._process_response(request, response)
+        response = self._verify_signature_if_present(request)
+        if response:
+            return self._process_response(request, response)
 
-            rate_limit_result = self._check_rate_limit(request)
-            if rate_limit_result.get("blocked"):
-                response = ResponseProvider.too_many_requests(error="Rate limit exceeded. Try again later.")
-                response = self._set_headers(response, rate_limit_result)
-                return self._process_response(request, response)
-
-            # noinspection PyBroadException
-            try:
-                resolver_match = resolve(request.path)
-                view_func = resolver_match.func
-                self._process_view(request, view_func, resolver_match.args, resolver_match.kwargs)
-            except:
-                pass
-
-            response = self.get_response(request)
+        rate_limit_result = self._check_rate_limit(request)
+        if rate_limit_result.get("blocked"):
+            response = ResponseProvider.too_many_requests(error="Rate limit exceeded. Try again later.")
             response = self._set_headers(response, rate_limit_result)
             return self._process_response(request, response)
 
-        except Exception as ex:
-            logger.error(
-                "Unhandled exception\n"
-                f"Path: {request.path}\n"
-                f"Method: {request.method}\n"
-                f"User: {getattr(request.user, 'username', 'Anonymous')}\n"
-                f"Exception Type: {type(ex).__name__}\n"
-                f"Message: {str(ex)}\n"
-                f"Traceback:\n{traceback.format_exc()}"
-            )
-            RequestContext.update(
-                exception_type=type(ex).__name__,
-                exception_message=str(ex),
-            )
-            response = ResponseProvider.handle_exception(ex)
-            return self._process_response(request, response)
+        # noinspection PyBroadException
+        try:
+            resolver_match = resolve(request.path)
+            view_func = resolver_match.func
+            self._process_view(request, view_func, resolver_match.args, resolver_match.kwargs)
+        except:
+            pass
+
+        response = self.get_response(request)
+        response = self._set_headers(response, rate_limit_result)
+        return self._process_response(request, response)
 
     @staticmethod
     def _process_view(request, view_func, view_args, view_kwargs):
@@ -140,12 +122,22 @@ class GatewayControlMiddleware:
             view_kwargs=view_kwargs,
         )
 
-    def _process_exception(self, request, exception):
+    def process_exception(self, request, exception):
+        logger.error(
+            "Unhandled exception\n"
+            f"Path: {request.path}\n"
+            f"Method: {request.method}\n"
+            f"User: {getattr(request.user, 'username', 'Anonymous')}\n"
+            f"Exception Type: {type(exception).__name__}\n"
+            f"Message: {str(exception)}\n"
+            f"Traceback:\n{traceback.format_exc()}"
+        )
         RequestContext.update(
             exception_type=type(exception).__name__,
             exception_message=str(exception),
         )
-        self._save_request_log()
+        response = ResponseProvider.handle_exception(exception)
+        return self._process_response(request, response)
 
     def _process_response(self, request, response):
         if hasattr(response, 'status_code'):
