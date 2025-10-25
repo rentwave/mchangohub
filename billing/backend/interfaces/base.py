@@ -9,7 +9,6 @@ from typing import Optional, Any, Dict, Type
 from billing.backend.processes import *
 from django.db import transaction
 from django.core.cache import cache
-from audit.backend.audit_management_service import AuditManagementService
 from base.backend.service import ExecutionProfileService, RuleProfileService, StateService, BalanceLogEntryService, \
 	BalanceLogService
 from billing.models import WalletTransaction, WalletAccount
@@ -17,7 +16,7 @@ from billing.models import WalletTransaction, WalletAccount
 log = logging.getLogger(__name__)
 
 
-class InterfaceBase(AuditManagementService):
+class InterfaceBase:
 	"""The class with the base helper functions for interfaces."""
 	_state_cache: Dict[str, Any] = {}
 	_execution_profile_cache: Dict[str, Any] = {}

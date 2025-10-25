@@ -2,7 +2,10 @@ import uuid
 
 from django.db import models
 
-class BaseModel(models.Model):
+from audit.mixins import AuditableMixin
+
+
+class BaseModel(AuditableMixin, models.Model):
     id = models.UUIDField(max_length=100, default=uuid.uuid4, unique=True, editable=False, primary_key=True)
     date_modified = models.DateTimeField(auto_now=True)
     date_created = models.DateTimeField(auto_now_add=True)

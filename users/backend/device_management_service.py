@@ -1,5 +1,6 @@
 import logging
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from authentication.backend.services import IdentityService
@@ -27,7 +28,7 @@ class DeviceManagementService:
         # Check if the user exists
         user = UserService().get(id=user_id, is_active=True)
         if not user:
-            raise Exception("User not found")
+            raise ObjectDoesNotExist("User not found")
 
         now = timezone.now()
         device = DeviceService().get(token=device_token)
@@ -95,7 +96,7 @@ class DeviceManagementService:
         # Check if the device exists
         device = DeviceService().get(id=device_id)
         if device is None:
-            raise Exception("Device not found")
+            raise ObjectDoesNotExist("Device not found")
 
         if device.is_active:
             # Expire the identities associated with the device

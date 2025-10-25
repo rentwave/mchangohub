@@ -1,8 +1,10 @@
 import hashlib
 from datetime import timedelta
 from random import randint
+from typing import Optional
 
 from django.conf import settings
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
@@ -11,7 +13,7 @@ from authentication.models import Identity
 from notifications.backend.notification_management_service import NotificationManagementService
 from otps.backend.services import OTPService
 from otps.models import OTP
-from users.backend.services import UserService
+from users.models import User
 
 
 class OTPManagementService:
@@ -52,7 +54,7 @@ class OTPManagementService:
             purpose: str,
             delivery_method: str,
             contact: str = "",
-            user_id: str = "",
+            user: Optional[User] = None,
             token: str = "",
     ) -> OTP:
         """
@@ -64,49 +66,42 @@ class OTPManagementService:
         :type delivery_method: str
         :param contact: Optional phone number or email to send the OTP to.
         :type contact: str
-        :param user_id: Optional user ID to whom the OTP is related.
-        :type user_id: str
+        :param user: Optional user ID to whom the OTP is related.
+        :type user: Optional[User]
         :param token: Optional identity token for 2FA OTPs.
         :type token: str
         :return: The created OTP object.
         :rtype: OTP
-        :raises ValueError: If required parameters are missing or invalid.
+        :raises ValidationError: If required parameters are missing or invalid.
         :raises Exception: If identity, user, or OTP creation fails.
         """
         if delivery_method not in OTP.DeliveryMethods.values:
-            raise ValueError("Invalid delivery method")
+            raise ValidationError("Invalid delivery method")
 
         if purpose not in OTP.PurposeTypes.values:
-            raise ValueError("Invalid purpose")
-
-        user = None
-        if user_id:
-            user = UserService().get(id=user_id, is_active=True)
-            if user is None:
-                raise Exception("User not found")
+            raise ValidationError("Invalid purpose")
 
         identity = None
         if purpose == OTP.PurposeTypes.TWO_FACTOR_AUTHENTICATION:
             if not token:
-                raise ValueError("Token must be provided for 2FA purpose")
+                raise ValidationError("Token must be provided for 2FA purpose")
 
             # TODO: REVIEW WHETHER WE SHOULD CHECK FOR EXPIRES AT HERE - IS IT NECESSARY?
             identity = IdentityService().get(
                 token=token,
                 status=Identity.Status.ACTIVATION_PENDING,
             )
-
             if identity is None:
-                raise Exception("Identity not found")
+                raise ObjectDoesNotExist("Identity not found")
 
             user = identity.user
 
         if not contact:
             if not user:
-                raise ValueError("Either contact or valid user must be provided.")
+                raise ValidationError("Either contact or valid user must be provided.")
             contact = user.email if delivery_method == "EMAIL" else user.phone_number
             if not contact:
-                raise Exception("Contact not found")
+                raise ValidationError("Contact not found")
 
         raw_code = self.generate_raw_code(settings.OTP_LENGTH)
         hashed_code = self.hash_code(raw_code)
@@ -145,7 +140,7 @@ class OTPManagementService:
             purpose: str,
             code: str,
             contact: str = "",
-            user_id: str = "",
+            user: Optional[User] = None,
             token: str = "",
     ) -> OTP:
         """
@@ -157,8 +152,8 @@ class OTPManagementService:
         :type code: str
         :param contact: Optional contact address (phone or email).
         :type contact: str
-        :param user_id: Optional user ID associated with the OTP.
-        :type user_id: str
+        :param user: Optional user associated with the OTP.
+        :type user: Optional[User],
         :param token: Optional identity token (used in 2FA).
         :type token: str
         :return: The verified OTP object.
@@ -167,19 +162,15 @@ class OTPManagementService:
         :raises Exception: If user or the identity is not found.
         """
         if not code:
-            raise ValueError("OTP code must be provided")
+            raise ValidationError("OTP code must be provided")
 
         if purpose not in OTP.PurposeTypes.values:
-            raise ValueError("Invalid purpose")
-
-        user = UserService().get(id=user_id, is_active=True) if user_id else None
-        if user_id and user is None:
-            raise Exception("User not found")
+            raise ValidationError("Invalid purpose")
 
         identity = None
         if purpose == OTP.PurposeTypes.TWO_FACTOR_AUTHENTICATION:
             if not token:
-                raise ValueError("Token must be provided for 2FA purpose")
+                raise ValidationError("Token must be provided for 2FA purpose")
 
             # TODO: REVIEW WHETHER WE SHOULD CHECK FOR EXPIRES AT HERE - IS IT NECESSARY?
             identity = IdentityService().get(
@@ -187,11 +178,11 @@ class OTPManagementService:
                 status=Identity.Status.ACTIVATION_PENDING
             )
             if identity is None:
-                raise Exception("Identity not found or expired")
+                raise ObjectDoesNotExist("Identity not found or expired")
 
         if not purpose == OTP.PurposeTypes.TWO_FACTOR_AUTHENTICATION:
             if not user and not contact:
-                raise ValueError("Either user_id or contact must be provided ")
+                raise ValidationError("Either user_id or contact must be provided ")
 
         filter_params = {
             "is_used": False,
@@ -208,15 +199,15 @@ class OTPManagementService:
         otp_queryset = OTPService().filter(**filter_params)
         otp = otp_queryset.order_by("-date_created").first()
         if not otp:
-            raise ValueError("No valid OTP found.")
+            raise ObjectDoesNotExist("No valid OTP found.")
 
         if otp.retry_count >= settings.OTP_MAX_RETRIES:
-            raise ValueError("Too many incorrect attempts. Please request a new OTP.")
+            raise ValidationError("Too many incorrect attempts. Please request a new OTP.")
 
         if self.hash_code(code) != otp.code:
             otp.retry_count += 1
             otp.save()
-            raise ValueError("Incorrect OTP.")
+            raise ValidationError("Incorrect OTP.")
 
         if otp.identity:
             otp.identity.status = Identity.Status.ACTIVE

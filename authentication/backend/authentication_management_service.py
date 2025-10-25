@@ -1,5 +1,6 @@
 from typing import Optional
 
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.db.models import Q
 from django.utils import timezone
 
@@ -35,7 +36,7 @@ class AuthenticationManagementService:
 
         user = UserService().filter(filters, is_active=True).first()
         if not user or not user.check_password(password):
-            raise Exception("Invalid credentials")
+            raise ValidationError("Invalid credentials")
 
         device = DeviceManagementService().create_device(
             user_id=user.id,
@@ -89,7 +90,7 @@ class AuthenticationManagementService:
         """
         user = UserService().get(id=user_id, is_active=True)
         if not user:
-            raise ValueError("User not found")
+            raise ObjectDoesNotExist("User not found")
 
         IdentityService().filter(
             user=user, status=Identity.Status.ACTIVE

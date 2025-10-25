@@ -26,6 +26,15 @@ class IdentityAdmin(admin.ModelAdmin):
 
     ordering = ('-date_created',)
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(LoginLog)
 class LoginLogAdmin(admin.ModelAdmin):
@@ -43,3 +52,12 @@ class LoginLogAdmin(admin.ModelAdmin):
     )
 
     readonly_fields = ('date_created', 'date_modified')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

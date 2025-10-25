@@ -156,6 +156,9 @@ class User(BaseModel, AbstractUser):
             logger.exception("User model - get_permissions exception: %s" % e)
             return []
 
+    def has_permission(self, permission_name):
+        return permission_name in self.permissions
+
 
 class Device(BaseModel):
     user = models.ForeignKey('users.User', on_delete=models.CASCADE)

@@ -2,9 +2,9 @@ import logging
 
 from django.views.decorators.csrf import csrf_exempt
 
+from authentication.backend.decorators import user_login_required
 from contributions.backend.contribution_management_service import ContributionManagementService
 from utils.common import get_request_data, get_request_data_2
-from utils.request_handler import request_handler
 from utils.response_provider import ResponseProvider
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ContributionAPIHandler:
     @staticmethod
-    @request_handler(audit=True)
+    @user_login_required
     def create_contribution(request):
         """
         Create a new contribution.
@@ -43,10 +43,10 @@ class ContributionAPIHandler:
             )
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - create_contribution exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while creating the contribution", error=str(ex))
+            return ResponseProvider.bad_request(message="An error occurred while creating the contribution", error=str(ex))
 
     @staticmethod
-    @request_handler(audit=True)
+    @user_login_required
     def update_contribution(request):
         """
         Update an existing contribution by ID.
@@ -80,10 +80,10 @@ class ContributionAPIHandler:
             return ResponseProvider.success(message="Contribution updated successfully")
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - update_contribution exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while updating the contribution", error=str(ex))
+            return ResponseProvider.bad_request(message="An error occurred while updating the contribution", error=str(ex))
 
     @staticmethod
-    @request_handler(audit=True)
+    @user_login_required
     def delete_contribution(request):
         """
         Soft delete a contribution by marking it inactive.
@@ -103,10 +103,9 @@ class ContributionAPIHandler:
             return ResponseProvider.success(message="Contribution deleted successfully")
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - delete_contribution exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while deleting the contribution", error=str(ex))
+            return ResponseProvider.bad_request(message="An error occurred while deleting the contribution", error=str(ex))
 
     @staticmethod
-    @request_handler
     def get_contribution(request):
         """
         Retrieve a specific contribution by ID.
@@ -122,11 +121,10 @@ class ContributionAPIHandler:
             return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - get_contribution exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while fetching the contribution", error=str(ex))
+            return ResponseProvider.bad_request(message="An error occurred while fetching the contribution", error=str(ex))
 
 
     @staticmethod
-    @csrf_exempt
     def get_public_contribution(request):
         """
         Retrieve a specific contribution by ID.
@@ -145,15 +143,14 @@ class ContributionAPIHandler:
                     contribution_id=contribution_id)
                 return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
             else:
-                return ResponseProvider.error(message="'contribution_id' is missing from the request data")
+                return ResponseProvider.bad_request(message="'contribution_id' is missing from the request data")
 
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - get_public_contribution exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while fetching the contribution",
+            return ResponseProvider.bad_request(message="An error occurred while fetching the contribution",
                                           error=str(ex))
 
     @staticmethod
-    @request_handler
     def filter_contributions(request):
         """
         Retrieve contributions filtered by optional parameters.
@@ -177,11 +174,10 @@ class ContributionAPIHandler:
             return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - filter_contributions exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while filtering contributions", error=str(ex))
+            return ResponseProvider.bad_request(message="An error occurred while filtering contributions", error=str(ex))
 
 
     @staticmethod
-    @csrf_exempt
     def filter_public_contributions(request):
         """
         Retrieve contributions filtered by optional parameters.
@@ -196,7 +192,7 @@ class ContributionAPIHandler:
             request_data = get_request_data_2(request)
             print(request_data)
             if not isinstance(request_data, dict):
-                return ResponseProvider.error(message="Invalid request data format. Expected a dictionary.")
+                return ResponseProvider.bad_request(message="Invalid request data format. Expected a dictionary.")
             filters = {
                 "search_term": request_data.get("search_term", ""),
                 "creator_id": request_data.get("creator_id", ""),
@@ -209,4 +205,4 @@ class ContributionAPIHandler:
             return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
         except Exception as ex:
             logger.exception(f"ContributionAPIHandler - filter_public_contributions exception: {ex}")
-            return ResponseProvider.error(message="An error occurred while filtering contributions", error=str(ex))
+            return ResponseProvider.bad_request(message="An error occurred while filtering contributions", error=str(ex))

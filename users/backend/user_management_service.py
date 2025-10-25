@@ -1,3 +1,6 @@
+from typing import Optional, Union
+
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db.models import Q, QuerySet
 from django.db import transaction
 from django.db.models.expressions import F
@@ -19,14 +22,14 @@ class UserManagementService:
     REQUIRED_FIELDS = ["phone_number"]
     UNIQUE_FIELDS = ["username", "id_number", "email", "phone_number"]
 
-    def get_user_by_credential(self, credential: str) -> tuple[User | None, str | None]:
+    def get_user_by_credential(self, credential: str) -> tuple[Optional[User], Optional[str]]:
         """
         Retrieve a user using a unique credential (username, ID number, email, or phone number).
 
         :param credential: The credential to search for.
         :type credential: str
         :return: Tuple containing the user instance (if found) and the matched field label.
-        :rtype: tuple[User | None, str | None]
+        :rtype: tuple[Optional[User], Optional[str]]
         """
         filters = Q()
         for field in self.UNIQUE_FIELDS:
@@ -44,6 +47,7 @@ class UserManagementService:
 
         return user, None
 
+    @transaction.atomic
     def create_user(self, active_user: bool = True, **kwargs) -> User:
         """
         Create or update a user based on phone number.
@@ -58,7 +62,7 @@ class UserManagementService:
         # Validate required fields presence
         missing_fields = [field for field in self.REQUIRED_FIELDS if not kwargs.get(field)]
         if missing_fields:
-            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+            raise ValidationError(f"Missing required fields: {', '.join(missing_fields)}")
 
         # Normalize and clean input data
         data = {k: v for k, v in kwargs.items() if v is not None and v != ""}
@@ -80,7 +84,7 @@ class UserManagementService:
         # Check if a user with phone_number exists
         existing_user = UserService().get(phone_number=data["phone_number"])
         if existing_user and existing_user.is_active:
-            raise Exception("Phone number already registered")
+            raise ValidationError("Phone number already registered")
 
         user_id = existing_user.id if existing_user else None
 
@@ -92,7 +96,7 @@ class UserManagementService:
                 if user_id:
                     query &= ~Q(id=user_id)
                 if UserService().filter(query).exists():
-                    raise ValueError(f"{field.replace('_', ' ').title()} already exists")
+                    raise ValidationError(f"{field.replace('_', ' ').title()} already exists")
 
         # Create or update user
         if existing_user:
@@ -111,6 +115,7 @@ class UserManagementService:
 
         return user
 
+    @transaction.atomic
     def update_user(self, user_id: str, **kwargs) -> User:
         """
         Update an existing user with provided fields.
@@ -123,7 +128,7 @@ class UserManagementService:
         """
         user = UserService().get(id=user_id, is_active=True)
         if not user:
-            raise ValueError("User does not exist")
+            raise ObjectDoesNotExist("User does not exist")
 
         # Filter out empty or None values
         data = {k: v for k, v in kwargs.items() if v}
@@ -149,7 +154,7 @@ class UserManagementService:
             if val:
                 existing_user = UserService().filter(Q(**{field: val}) & ~Q(id=user.id)).first()
                 if existing_user:
-                    raise ValueError(f"{field.replace('_', ' ').title()} already exists")
+                    raise ValidationError(f"{field.replace('_', ' ').title()} already exists")
 
         updated_user = UserService().update(pk=user.id, **data)
         if not updated_user:
@@ -171,7 +176,7 @@ class UserManagementService:
         """
         user = UserService().get(id=user_id, is_active=True)
         if not user:
-            raise ValueError("User does not exist")
+            raise ObjectDoesNotExist("User does not exist")
 
         user.is_active = False
         user.save()
@@ -190,7 +195,7 @@ class UserManagementService:
         """
         user, _ = self.get_user_by_credential(credential)
         if not user:
-            raise Exception("User not found")
+            raise ObjectDoesNotExist("User not found")
 
         new_password = generate_random_pin()
         user.set_password(new_password)
@@ -216,7 +221,7 @@ class UserManagementService:
         """
         user = UserService().get(id=user_id, is_active=True)
         if not user:
-            raise Exception("User not found")
+            raise ObjectDoesNotExist("User not found")
 
         new_password = generate_random_pin()
         user.set_password(new_password)
@@ -246,10 +251,10 @@ class UserManagementService:
         """
         user = UserService().get(id=user_id, is_active=True)
         if not user:
-            raise ValueError("User not found")
+            raise ObjectDoesNotExist("User not found")
 
         if not user.check_password(old_password):
-            raise ValueError("Incorrect password")
+            raise ValidationError("Incorrect password")
 
         user.set_password(new_password)
         user.save()
@@ -269,7 +274,7 @@ class UserManagementService:
         """
         user = UserService().get(id=user_id, is_active=True)
         if not user:
-            raise ValueError("User not found")
+            raise ObjectDoesNotExist("User not found")
 
         user_dict = model_to_dict(user)
         user_dict["id"] = str(user.id)
@@ -281,27 +286,27 @@ class UserManagementService:
 
     @staticmethod
     def filter_users(
-            search_term: str = "",
-            role_name: str | None = None,
-            is_staff: bool | None = None,
-            is_superuser: bool | None = None,
+            search_term: Optional[str] = None,
+            role_name: Optional[str] = None,
+            is_staff: Optional[bool] = None,
+            is_superuser: Optional[bool] = None,
             queryset: bool = False,
-    ) -> QuerySet | list[dict]:
+    ) -> Union[QuerySet, list[dict]]:
         """
         Filter and retrieve users based on search criteria.
 
         :param search_term: Search string to match against user fields.
-        :type search_term: str
+        :type search_term: Optional[str]
         :param role_name: Optional role name to filter users by.
-        :type role_name: str | None
+        :type role_name: Optional[str]
         :param is_staff: Optional filter for staff users.
-        :type is_staff: bool | None
+        :type is_staff: Optional[bool]
         :param is_superuser: Optional filter for superusers.
-        :type is_superuser: bool | None
+        :type is_superuser: Optional[bool]
         :param queryset: If True, return a QuerySet instead of a list of dicts.
         :type queryset: bool
         :return: QuerySet or list of matching users.
-        :rtype: QuerySet | list[dict]
+        :rtype: Union[QuerySet, list[dict]]
         :raises ValueError: If the provided role does not exist.
         """
         filters = Q(is_active=True)
@@ -321,7 +326,7 @@ class UserManagementService:
         if role_name:
             role = RoleService().get(name=role_name, is_active=True)
             if not role:
-                raise ValueError("Role does not exist")
+                raise ValidationError("Role does not exist")
             filters &= Q(role=role)
 
         if is_staff is not None:

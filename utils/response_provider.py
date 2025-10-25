@@ -1,62 +1,69 @@
+from django.core.exceptions import ValidationError, ObjectDoesNotExist, PermissionDenied
 from django.http import JsonResponse
 
 
 class ResponseProvider:
     @staticmethod
-    def success(code="200.000", message="Success", data=None):
+    def _response(success: bool, code: str, message: str, status: int, data=None, error=None) -> JsonResponse:
         return JsonResponse({
-            "success": True,
-            "code": code,
-            "message": message,
-            "data": data or {}
-        }, status=200)
+            'success': success,
+            'code': code,
+            'message': message,
+            'data': data or {},
+            'error': error or '',
+        }, status=status)
 
-    @staticmethod
-    def created(code="201.000", message="Created", data=None):
-        return JsonResponse({
-            "success": True,
-            "code": code,
-            "message": message,
-            "data": data or {}
-        }, status=201)
+    @classmethod
+    def handle_exception(cls, ex: Exception) -> JsonResponse:
+        if isinstance(ex, ValidationError):
+            return cls.bad_request('Validation error', error=str(ex))
+        elif isinstance(ex, ObjectDoesNotExist):
+            return cls.not_found('Resource not found', error=str(ex))
+        elif isinstance(ex, PermissionDenied):
+            return cls.forbidden('Forbidden', error='You do not have permission to perform this action.')
+        else:
+            return cls.server_error('Internal server error', error=str(ex))
 
-    @staticmethod
-    def error(code="400.000", message="Error", error=None):
-        return JsonResponse({
-            "success": False,
-            "code": code,
-            "message": message,
-            "error": error or ""
-        }, status=400)
+    @classmethod
+    def success(cls, code='200.000', message='Success', data=None):
+        return cls._response(True, code, message, 200, data=data)
 
-    @staticmethod
-    def not_found(message="Not found", code="404.000"):
-        return JsonResponse({
-            "success": False,
-            "code": code,
-            "message": message
-        }, status=404)
+    @classmethod
+    def created(cls, code="201.000", message='Created', data=None):
+        return cls._response(True, code, message, 201, data=data)
 
-    @staticmethod
-    def unauthorized(message="Not authenticated", code="401.000"):
-        return JsonResponse({
-            "success": False,
-            "code": code,
-            "message": message
-        }, status=401)
+    @classmethod
+    def accepted(cls, code="202.000", message='Accepted', data=None):
+        return cls._response(True, code, message, 202, data=data)
 
-    @staticmethod
-    def forbidden(message="Forbidden", code="403.000"):
-        return JsonResponse({
-            "success": False,
-            "code": code,
-            "message": message
-        }, status=403)
+    @classmethod
+    def bad_request(cls, code="400.000", message='Bad Request', error=None):
+        return cls._response(False, code, message, 400, error=error)
 
-    @staticmethod
-    def server_error(message="Server error", code="500.000"):
-        return JsonResponse({
-            "success": False,
-            "code": code,
-            "message": message
-        }, status=500)
+    @classmethod
+    def unauthorized(cls, code="401.000", message='Unauthorized', error=None):
+        return cls._response(False, code, message, 401, error=error)
+
+    @classmethod
+    def forbidden(cls, code="403.000", message='Forbidden', error=None):
+        return cls._response(False, code, message, 403, error=error)
+
+    @classmethod
+    def not_found(cls, code="404.000", message='Not Found', error=None):
+        return cls._response(False, code, message, 404, error=error)
+
+    @classmethod
+    def too_many_requests(cls, code="429.000", message='Rate Limit Exceeded', error=None):
+        return cls._response(False, code, message, 429, error=error)
+
+    @classmethod
+    def server_error(cls, code="500.000", message='Internal Server Error', error=None):
+        return cls._response(False, code, message, 500, error=error)
+
+    @classmethod
+    def not_implemented(cls, code="501.000", message='Not Implemented', error=None):
+        return cls._response(False, code, message, 501, error=error)
+
+    @classmethod
+    def service_unavailable(cls, code="503.000", message='Service Unavailable', error=None):
+        return cls._response(False, code, message, 503, error=error)
