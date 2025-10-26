@@ -198,7 +198,7 @@ class GatewayControlMiddleware:
 
         identity = (
             IdentityService()
-            .filter(~Q(user=None), token=token, state__name="Active")
+            .filter(~Q(user=None), token=token, status="ACTIVE")
             .order_by("-date_created")
             .first()
         )
