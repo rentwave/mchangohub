@@ -11,9 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class ContributionAPIHandler:
-    @staticmethod
     @user_login_required
-    def create_contribution(request):
+    def create_contribution(self, request):
         """
         Create a new contribution.
 
@@ -82,9 +81,8 @@ class ContributionAPIHandler:
             logger.exception(f"ContributionAPIHandler - update_contribution exception: {ex}")
             return ResponseProvider.bad_request(message="An error occurred while updating the contribution", error=str(ex))
 
-    @staticmethod
     @user_login_required
-    def delete_contribution(request):
+    def delete_contribution(self, request):
         """
         Soft delete a contribution by marking it inactive.
 
@@ -105,8 +103,8 @@ class ContributionAPIHandler:
             logger.exception(f"ContributionAPIHandler - delete_contribution exception: {ex}")
             return ResponseProvider.bad_request(message="An error occurred while deleting the contribution", error=str(ex))
 
-    @staticmethod
-    def get_contribution(request):
+    # @staticmethod
+    def get_contribution(self, request):
         """
         Retrieve a specific contribution by ID.
 
