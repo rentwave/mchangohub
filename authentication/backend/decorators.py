@@ -23,5 +23,7 @@ def user_login_required(required_permission=None):
         return wrapper
 
     if callable(required_permission):
-        return decorator(required_permission)
+        _func = required_permission
+        required_permission = None
+        return decorator(_func)
     return decorator
