@@ -16,7 +16,11 @@ class ResponseProvider:
     @classmethod
     def handle_exception(cls, ex: Exception) -> JsonResponse:
         if isinstance(ex, ValidationError):
-            return cls.bad_request(message='Validation Error', error=str(ex))
+            if hasattr(ex, "messages"):
+                error_message = ", ".join(ex.messages)
+            else:
+                error_message = str(ex)
+            return cls.bad_request(message="Validation Error", error=error_message)
         elif isinstance(ex, ObjectDoesNotExist):
             return cls.not_found(error=str(ex))
         elif isinstance(ex, PermissionDenied):
