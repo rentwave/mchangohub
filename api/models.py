@@ -20,6 +20,27 @@ class ApiClient(BaseModel):
         blank=True,
         help_text="Comma-separated list of allowed IPs for request validation."
     )
+    signature_secret = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Shared secret for HMAC signature validation of callbacks."
+    )
+    signature_header_key = models.CharField(
+        max_length=50,
+        default="x-signature",
+        help_text="Header name containing the callback signature."
+    )
+    signature_algorithm = models.CharField(
+        max_length=20,
+        choices=[("HMAC-SHA256", "HMAC-SHA256"), ("RSA-SHA256", "RSA-SHA256")],
+        default="HMAC-SHA256",
+        help_text="Algorithm used to verify callback signatures."
+    )
+    require_signature_verification = models.BooleanField(
+        default=False,
+        help_text="If True, incoming requests must include a valid cryptographic signature."
+    )
     meta = models.JSONField(
         blank=True,
         null=True,
@@ -33,15 +54,16 @@ class ApiClient(BaseModel):
         ordering = ["name"]
 
     def save(self, *args, **kwargs):
+        import secrets
         if not self.api_key:
             self.api_key = secrets.token_hex(32)
         super().save(*args, **kwargs)
 
-    def __str__(self):
-        return f"{self.name} ({'Active' if self.is_active else 'Inactive'})"
-
     def get_active_public_key(self):
         return self.keys.filter(is_active=True).order_by("-date_created").first()
+
+    def __str__(self):
+        return f"{self.name} ({'Active' if self.is_active else 'Inactive'})"
 
 
 class ApiClientKey(BaseModel):
@@ -61,7 +83,7 @@ class ApiClientKey(BaseModel):
     )
     is_active = models.BooleanField(
         default=True,
-        help_text="Indicates if this key is the current active key for the client."
+        help_text="Indicates if this key is currently active."
     )
     expires_at = models.DateTimeField(null=True, blank=True)
 
@@ -102,6 +124,41 @@ class SystemKey(BaseModel):
 
     def __str__(self):
         return f"{self.name} [{self.fingerprint[:12]}...]"
+
+
+class APICallback(BaseModel):
+    client = models.ForeignKey(
+        ApiClient,
+        on_delete=models.CASCADE,
+        related_name="callbacks",
+        help_text="API client associated with this callback."
+    )
+    path = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="URL path pattern or endpoint for the callback."
+    )
+    require_authentication = models.BooleanField(
+        default=False,
+        help_text="If True, the callback requires API key authentication."
+    )
+    require_signature_verification = models.BooleanField(
+        default=False,
+        help_text="If True, incoming requests must include a valid cryptographic signature."
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Indicates whether this callback is active."
+    )
+
+    class Meta:
+        verbose_name = "API Callback"
+        verbose_name_plural = "API Callbacks"
+        ordering = ["client__name", "path"]
+        unique_together = ["client", "path"]
+
+    def __str__(self):
+        return f"{self.client.name} → {self.path} ({'Active' if self.is_active else 'Inactive'})"
 
 
 class RateLimitRule(BaseModel):

@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import json
 import logging
 import re
@@ -17,6 +19,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key, lo
 from cryptography.exceptions import InvalidSignature
 from django.contrib.auth.models import AnonymousUser
 
+from api.backend.services import APICallbackService
 from api.models import RateLimitRule, RateLimitAttempt, RateLimitBlock, ApiClient, SystemKey
 from audit.backend.request_context import RequestContext
 from audit.models import RequestLog
@@ -45,6 +48,8 @@ class GatewayControlMiddleware:
 
     SAVE_REQUEST_LOG_EXEMPT_PATHS = []
 
+    AUTHENTICATION_REQUIRED = True
+    SIGNATURE_VERIFICATION_REQUIRED = False
     ENCRYPTED = False
 
     def __init__(self, get_response):
@@ -76,24 +81,26 @@ class GatewayControlMiddleware:
             started_at=timezone.now(),
         )
 
-        print(RequestContext.get())
+        callback = APICallbackService().filter(path=request.path, is_active=True).first()
+        if callback:
+            request.api_client = callback.client
+            RequestContext.update(api_client=request.api_client)
 
-        # missing = [h for h in self.REQUIRED_HEADERS if h not in request.headers]
-        # if missing:
-        #     response = JsonResponse(
-        #         {"error": f"Missing required headers: {', '.join(missing)}"},
-        #         status=400
-        #     )
-        #     return self._process_response(request, response)
+            self.AUTHENTICATION_REQUIRED = callback.require_authentication
+            self.SIGNATURE_VERIFICATION_REQUIRED = callback.require_signature_verification
 
-        response = self._validate_api_client(request)
-        RequestContext.update(api_client=request.api_client)
-        if response:
-            return self._process_response(request, response)
+        if self.AUTHENTICATION_REQUIRED:
+            response = self._validate_api_client(request)
+            if response:
+                return self._process_response(request, response)
 
-        response = self._verify_signature_if_present(request)
-        if response:
-            return self._process_response(request, response)
+            RequestContext.update(api_client=request.api_client)
+            self.SIGNATURE_VERIFICATION_REQUIRED = request.api_client.require_signature_verification
+
+        if self.SIGNATURE_VERIFICATION_REQUIRED:
+            response = self._verify_signature(request)
+            if response:
+                return self._process_response(request, response)
 
         rate_limit_result = self._check_rate_limit(request)
         if rate_limit_result.get("blocked"):
@@ -232,39 +239,66 @@ class GatewayControlMiddleware:
         request.api_client = client
         return None
 
-    def _verify_signature_if_present(self, request):
-        signature_b64 = request.headers.get(self.SIGNATURE_HEADER)
-        if not signature_b64:
-            return None
-
+    @staticmethod
+    def _verify_signature(request):
         client = getattr(request, "api_client", None)
         if not client:
-            return ResponseProvider.forbidden(error= "Client context missing for signature verification")
+            return ResponseProvider.forbidden(
+                error="Missing client context for signature verification"
+            )
 
+        signature_b64 = request.headers.get(client.signature_header_key)
+
+        if not signature_b64:
+            return ResponseProvider.unauthorized(
+                error="Signature required but not provided"
+            )
+
+        algo = client.signature_algorithm
+        secret = client.signature_secret
         client_key = client.get_active_public_key()
-        if not client_key or not client_key.public_key:
-            logger.warning("No active public key for client %s", client.name)
-            return ResponseProvider.server_error(error="Client public key not configured")
+        body_bytes = getattr(request, "body", b"")
 
         try:
-            public_key = load_pem_public_key(client_key.public_key.encode("utf-8"))
-            signature = base64.b64decode(signature_b64)
-            body_bytes = getattr(request, "body", b"")
+            if algo == "HMAC-SHA256":
+                if not secret:
+                    return ResponseProvider.server_error(
+                        error="Missing HMAC secret for required verification"
+                    )
 
-            public_key.verify(
-                signature,
-                body_bytes,
-                asym_padding.PSS(
-                    mgf=asym_padding.MGF1(hashes.SHA256()),
-                    salt_length=asym_padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )
+                expected_sig = hmac.new(secret.encode(), body_bytes, hashlib.sha256).digest()
+                provided_sig = base64.b64decode(signature_b64)
+
+                if not hmac.compare_digest(expected_sig, provided_sig):
+                    return ResponseProvider.unauthorized(error="Invalid HMAC signature")
+
+            elif algo == "RSA-SHA256":
+                if not client_key or not client_key.public_key:
+                    return ResponseProvider.server_error(
+                        error="No active RSA public key configured for client"
+                    )
+
+                public_key = load_pem_public_key(client_key.public_key.encode("utf-8"))
+                public_key.verify(
+                    base64.b64decode(signature_b64),
+                    body_bytes,
+                    asym_padding.PSS(
+                        mgf=asym_padding.MGF1(hashes.SHA256()),
+                        salt_length=asym_padding.PSS.MAX_LENGTH,
+                    ),
+                    hashes.SHA256(),
+                )
+
+            else:
+                return ResponseProvider.server_error(
+                    error=f"Unsupported signature algorithm: {algo}"
+                )
         except InvalidSignature:
-            logger.warning("Invalid signature from client %s (IP %s)", client.name, request.client_ip)
+            logger.warning("Invalid signature from client %s", client.name)
             return ResponseProvider.unauthorized(error="Invalid signature")
+
         except Exception as exc:
-            logger.exception("Signature verification error for client %s: %s", client.name, exc)
+            logger.exception("Signature verification failed for client %s: %s", client.name, exc)
             return ResponseProvider.server_error(error="Signature verification failed")
 
         return None

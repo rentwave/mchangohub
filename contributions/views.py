@@ -1,206 +1,105 @@
-import logging
-
-from django.views.decorators.csrf import csrf_exempt
-
 from authentication.backend.decorators import user_login_required
 from contributions.backend.contribution_management_service import ContributionManagementService
-from utils.common import get_request_data, get_request_data_2
 from utils.response_provider import ResponseProvider
-
-logger = logging.getLogger(__name__)
 
 
 class ContributionAPIHandler:
+    @classmethod
     @user_login_required
-    def create_contribution(self, request):
-        """
-        Create a new contribution.
+    def create_contribution(cls, request):
+        user = request.user
+        name = request.data.get("name")
+        description = request.data.get("description")
+        target_amount = request.data.get("target_amount")
+        end_date = request.data.get("end_date")
+        is_private = request.data.get("is_private") == "true"
+        photo = request.files.get("file")
 
-        :param request: Django HTTP request object containing contribution details.
-        :type request: HttpRequest
-        :return: JSON response with created contribution ID.
-        :rtype: JsonResponse
-        """
-        try:
-            user = request.user
-            is_private = True
-            if request.POST.get("is_private", "false") == "false":
-                is_private = False
-            k = {
-                    "name": request.POST.get("name"),
-                    "description": request.POST.get("description"),
-                    "target_amount": request.POST.get("target_amount"),
-                    "end_date": request.POST.get("end_date"),
-                    "phone_numbers": request.POST.get("phone_numbers"),
-                    "is_private": is_private
-            }
-            file = request.FILES['file']
-            contribution = ContributionManagementService().create_contribution(user=user, file=file, **k)
-            return ResponseProvider.created(
-                message="Contribution created successfully",
-                data={"contribution_id": str(contribution.id)}
-            )
-        except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - create_contribution exception: {ex}")
-            return ResponseProvider.bad_request(message="An error occurred while creating the contribution", error=str(ex))
+        contribution = ContributionManagementService().create_contribution(
+            user=user,
+            name=name,
+            description=description,
+            target_amount=target_amount,
+            end_date=end_date,
+            is_private=is_private,
+            photo=photo
+        )
 
-    @staticmethod
+        return ResponseProvider.created(
+            message="Contribution created successfully",
+            data={"contribution_id": str(contribution.id)}
+        )
+
+    @classmethod
     @user_login_required
-    def update_contribution(request):
-        """
-        Update an existing contribution by ID.
+    def update_contribution(cls, request):
+        user = request.user
+        name = request.data.get("name")
+        description = request.data.get("description")
+        target_amount = request.data.get("target_amount")
+        end_date = request.data.get("end_date")
+        is_private = request.data.get("is_private") == "true"
+        photo = request.files.get("file")
 
-        :param request: Django HTTP request object containing 'contribution_id' and fields to update.
-        :type request: HttpRequest
-        :return: JSON response confirming update.
-        :rtype: JsonResponse
-        """
-        try:
-            user = request.user
-            contribution_id = request.POST.get("contribution_id", "")
-            is_private = True
-            if request.POST.get("is_private", "false") == "false":
-                is_private = False
-            k = {
-                "name": request.POST.get("name"),
-                "description": request.POST.get("description"),
-                "target_amount": request.POST.get("target_amount"),
-                "end_date": request.POST.get("end_date"),
-                "phone_numbers": request.POST.get("phone_numbers"),
-                "is_private": is_private
-            }
-            file = request.FILES['file']
-            ContributionManagementService().update_contribution(
-                user=user,
-                contribution_id=contribution_id,
-                file=file,
-                **k
-            )
-            return ResponseProvider.success(message="Contribution updated successfully")
-        except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - update_contribution exception: {ex}")
-            return ResponseProvider.bad_request(message="An error occurred while updating the contribution", error=str(ex))
+        ContributionManagementService().update_contribution(
+            user=user,
+            name=name,
+            description=description,
+            target_amount=target_amount,
+            end_date=end_date,
+            is_private=is_private,
+            photo=photo
+        )
 
+        return ResponseProvider.success(
+            message="Contribution updated successfully",
+        )
+
+    @classmethod
     @user_login_required
-    def delete_contribution(self, request):
-        """
-        Soft delete a contribution by marking it inactive.
+    def delete_contribution(cls, request):
+        user = request.user
+        contribution_id = request.data.get("contribution_id")
+        ContributionManagementService().delete_contribution(
+            user=user,
+            contribution_id=contribution_id
+        )
 
-        :param request: Django HTTP request object containing 'contribution_id'.
-        :type request: HttpRequest
-        :return: JSON response confirming deletion.
-        :rtype: JsonResponse
-        """
-        try:
-            user = request.user
-            contribution_id = request.data.get("contribution_id", "")
-            ContributionManagementService().delete_contribution(
-                user=user,
-                contribution_id=contribution_id
-            )
-            return ResponseProvider.success(message="Contribution deleted successfully")
-        except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - delete_contribution exception: {ex}")
-            return ResponseProvider.bad_request(message="An error occurred while deleting the contribution", error=str(ex))
+        return ResponseProvider.success(message="Contribution deleted successfully")
 
-    # @staticmethod
-    def get_contribution(self, request):
-        """
-        Retrieve a specific contribution by ID.
+    @classmethod
+    def get_contribution(cls, request):
+        contribution_id = request.data.get("contribution_id")
+        contribution_data = ContributionManagementService().fetch_contribution(
+            contribution_id=contribution_id
+        )
 
-        :param request: Django HTTP request object containing 'contribution_id'.
-        :type request: HttpRequest
-        :return: JSON response with contribution data.
-        :rtype: JsonResponse
-        """
-        try:
-            contribution_id = request.data.get("contribution_id", "")
-            contribution_data = ContributionManagementService().get_contribution(contribution_id=contribution_id)
-            return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
-        except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - get_contribution exception: {ex}")
-            return ResponseProvider.bad_request(message="An error occurred while fetching the contribution", error=str(ex))
+        return ResponseProvider.success(
+            message="Contribution fetched successfully",
+            data=contribution_data
+        )
 
+    @classmethod
+    def filter_contributions(cls, request):
+        user = request.user
+        creator_id = request.data.get("creator_id")
+        search_term = request.data.get("search_term")
+        status = request.data.get("status")
+        start_date = request.data.get("start_date")
+        end_date = request.data.get("end_date")
+        is_private = request.data.get("is_private") == "true"
 
-    @staticmethod
-    def get_public_contribution(request):
-        """
-        Retrieve a specific contribution by ID.
+        contributions = ContributionManagementService().filter_contributions(
+            user=user,
+            creator_id=creator_id,
+            search_term=search_term,
+            status=status,
+            start_date=start_date,
+            end_date=end_date,
+            is_private=is_private
+        )
 
-        :param request: Django HTTP request object containing 'contribution_id'.
-        :type request: HttpRequest
-        :return: JSON response with contribution data.
-        :rtype: JsonResponse
-        """
-        try:
-            request_data = get_request_data_2(request)
-            print(request_data)
-            if isinstance(request_data, dict) and "contribution_id" in request_data:
-                contribution_id = request_data["contribution_id"]
-                contribution_data = ContributionManagementService().get_contribution(
-                    contribution_id=contribution_id)
-                return ResponseProvider.success(message="Contribution fetched successfully", data=contribution_data)
-            else:
-                return ResponseProvider.bad_request(message="'contribution_id' is missing from the request data")
-
-        except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - get_public_contribution exception: {ex}")
-            return ResponseProvider.bad_request(message="An error occurred while fetching the contribution",
-                                          error=str(ex))
-
-    @staticmethod
-    def filter_contributions(request):
-        """
-        Retrieve contributions filtered by optional parameters.
-
-        :param request: Django HTTP request object containing optional filters:
-            'search_term', 'creator_id', 'status', 'start_date', 'end_date'.
-        :type request: HttpRequest
-        :return: JSON response with the filtered contributions' list.
-        :rtype: JsonResponse
-        """
-        try:
-            filters = {
-                "search_term": request.data.get("search_term", ""),
-                "creator_id": request.data.get("creator_id", ""),
-                "status": request.data.get("status", ""),
-                "start_date": request.data.get("start_date", ""),
-                "end_date": request.data.get("end_date", ""),
-                "is_public": False,
-            }
-            contributions = ContributionManagementService().filter_contributions(**filters)
-            return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
-        except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - filter_contributions exception: {ex}")
-            return ResponseProvider.bad_request(message="An error occurred while filtering contributions", error=str(ex))
-
-
-    @staticmethod
-    def filter_public_contributions(request):
-        """
-        Retrieve contributions filtered by optional parameters.
-
-        :param request: Django HTTP request object containing optional filters:
-            'search_term', 'creator_id', 'status', 'start_date', 'end_date', 'is_private'.
-        :type request: HttpRequest
-        :return: JSON response with the filtered contributions' list.
-        :rtype: JsonResponse
-        """
-        try:
-            request_data = get_request_data_2(request)
-            print(request_data)
-            if not isinstance(request_data, dict):
-                return ResponseProvider.bad_request(message="Invalid request data format. Expected a dictionary.")
-            filters = {
-                "search_term": request_data.get("search_term", ""),
-                "creator_id": request_data.get("creator_id", ""),
-                "status": request_data.get("status", ""),
-                "start_date": request_data.get("start_date", ""),
-                "end_date": request_data.get("end_date", ""),
-                "is_public": True,
-            }
-            contributions = ContributionManagementService().filter_contributions(**filters)
-            return ResponseProvider.success(message="Contributions filtered successfully", data=contributions)
-        except Exception as ex:
-            logger.exception(f"ContributionAPIHandler - filter_public_contributions exception: {ex}")
-            return ResponseProvider.bad_request(message="An error occurred while filtering contributions", error=str(ex))
+        return ResponseProvider.success(
+            message="Contributions filtered successfully",
+            data=contributions
+        )

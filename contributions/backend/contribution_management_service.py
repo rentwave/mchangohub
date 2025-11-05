@@ -1,8 +1,11 @@
 import re
-from typing import Union
+from typing import Union, Optional
+
+from django.core.exceptions import ValidationError, ObjectDoesNotExist, PermissionDenied
 from django.core.files import File
 from dateutil.parser import parse
 from django.conf import settings
+from django.core.files.uploadedfile import UploadedFile
 from django.db.models.functions import Trim, Replace, Concat, Coalesce
 from django.forms.models import model_to_dict
 from django.db.models import Q, QuerySet, F, Value
@@ -18,20 +21,13 @@ from utils.common import normalize_phone_number
 
 
 class ContributionManagementService:
-
-    REQUIRED_FIELDS = ['name', 'target_amount', 'end_date']
-
-    @staticmethod
-    def _generate_contribution_alias() -> str:
+    @classmethod
+    def _generate_contribution_alias(cls) -> str:
         """
-        Generate a new contribution alias in the format ``G-XXXX``.
+        Generate a sequential alias for a new contribution.
 
-        The alias is incremented based on the highest existing alias. If no
-        valid alias exists, the sequence starts from ``G-0001``.
-
-        :return: The newly generated contribution alias.
+        :return: A new alias in the format `C-XXXX`.
         :rtype: str
-        :raises Exception: If database access fails while retrieving the last contribution.
         """
         last_contribution = (
             Contribution.objects.select_for_update()
@@ -48,171 +44,228 @@ class ContributionManagementService:
 
         return alias
 
+    @classmethod
+    def get_contribution(cls, contribution_id: str) -> Contribution:
+        """
+        Retrieve an active contribution by its ID.
+
+        :param contribution_id: The unique identifier of the contribution.
+        :type contribution_id: str
+        :raises ObjectDoesNotExist: If the contribution is not found or inactive.
+        :return: The matching contribution instance.
+        :rtype: Contribution
+        """
+        contribution = (
+            Contribution.objects
+            .exclude(status=Contribution.Status.INACTIVE)
+            .filter(id=contribution_id)
+            .first()
+        )
+
+        if not contribution:
+            raise ObjectDoesNotExist("Contribution not found or inactive")
+
+        return contribution
+
+    @classmethod
     @transaction.atomic
-    def create_contribution(self, user: User, file=None, **kwargs) -> Contribution:
+    def create_contribution(
+            cls,
+            user: User,
+            name:str,
+            description: str,
+            target_amount: float,
+            end_date: str,
+            is_private: bool = False,
+            photo: Optional[UploadedFile] = None
+    ) -> Contribution:
         """
-        Create a new contribution entry.
+        Create a new contribution.
 
-        :param user: The creator User instance.
-        :param kwargs: Required fields: name, target_amount, end_date; optional: description, phone_numbers.
-        :raises ValueError: If required fields are missing, or contribution name already exists.
+        :param user: The user creating the contribution.
+        :type user: User
+        :param name: The name of the contribution.
+        :type name: str
+        :param description: A short description of the contribution.
+        :type description: str
+        :param target_amount: The target amount for the contribution.
+        :type target_amount: float
+        :param end_date: The contribution's end date (parsable string format).
+        :type end_date: str
+        :param is_private: Whether the contribution is private.
+        :type is_private: bool
+        :param photo: Optional image file for the contribution.
+        :type photo: UploadedFile, optional
+        :raises ValidationError: If validation fails for name, amount, or end date.
         :raises Exception: If contribution creation fails.
-        :return: The created Contribution instance.
+        :return: The created contribution instance.
+        :rtype: Contribution
         """
-        missing = [f for f in self.REQUIRED_FIELDS if not kwargs.get(f)]
-        if missing:
-            raise ValueError(f"Missing required fields: {', '.join(missing)}")
-        name = str(kwargs.get("name")).strip().title()
-        description = str(kwargs.get("description", "")).strip().capitalize()
-        try:
-            target_amount = float(str(kwargs.get("target_amount")).strip())
-        except (ValueError, TypeError):
-            raise ValueError("Invalid target amount")
+        # Validate and normalize data
+        name = name.strip().title()
+        if not name:
+            raise ValidationError("Contribution name must be provided")
 
         try:
-            end_date = parse(str(kwargs.get("end_date")))
+            target_amount = float(str(target_amount).strip())
         except (ValueError, TypeError):
-            raise ValueError("Invalid end date")
-        if ContributionService().filter(creator=user, name=name).exists():
-            raise ValueError("Contribution name already exists")
-        alias = self._generate_contribution_alias()
+            raise ValidationError("Invalid target amount value")
 
+        if target_amount <= 0:
+            raise ValidationError("Contribution amount must be greater than zero")
+
+        if not target_amount:
+            raise ValidationError("Target amount must be provided")
+        if not isinstance(target_amount, float):
+            target_amount = float(str(target_amount).strip())
+
+        try:
+            end_date = parse(end_date)
+        except Exception:
+            raise ValidationError("Invalid end date format")
+
+        description = description.strip()
+
+        # Create contribution
+        alias = cls._generate_contribution_alias()
         contribution = ContributionService().create(
             alias=alias,
             name=name,
             description=description,
             target_amount=target_amount,
             end_date=end_date,
-            profile=file,
+            profile=photo,
             creator=user,
-            is_private=kwargs.get('is_private')
+            is_private=is_private
         )
         if not contribution:
             raise Exception("Contribution not created")
-        phone_numbers = kwargs.get("phone_numbers", [])
-        print(phone_numbers)
-        # normalized_phones = [normalize_phone_number(phone) for phone in phone_numbers if phone]
-        # if normalized_phones:
-        #     NotificationManagementService(None).send_notification(
-        #         delivery_method=Notification.DeliveryMethods.SMS,
-        #         recipients=normalized_phones,
-        #         template="sms_contribution_invitation",
-        #         context={
-        #             "contribution_name": contribution.name,
-        #             "target_amount": contribution.target_amount,
-        #             "end_date": contribution.end_date.strftime("%Y-%m-%d"),
-        #             "creator_name": user.full_name,
-        #             "contribution_link": f"https://mchangohub.com/contributions/{contribution.alias}",
-        #         },
-        #     )
+
         return contribution
 
+    @classmethod
     @transaction.atomic
-    def update_contribution(self, user: User, file, contribution_id: str, **kwargs) -> Contribution:
+    def update_contribution(
+            cls,
+            contribution_id: str,
+            user: User,
+            name: Optional[str] = None,
+            description: Optional[str] = None,
+            target_amount: Optional[float] = None,
+            end_date: Optional[str] = None,
+            is_private: Optional[bool] = None,
+            photo: Optional[UploadedFile] = None
+    ) -> Contribution:
         """
-        Update fields of a contribution identified by its ID.
+        Update an existing contribution.
 
-        :param user: The user attempting the update; must be the creator.
-        :param contribution_id: The UUID or string identifier of the contribution.
-        :param kwargs: Fields and their new values to update on the contribution.
-        :raises ValueError: If the contribution is not found, user lacks permission, or new name duplicates existing.
-        :raises Exception: If the update operation fails.
-        :return: The updated Contribution instance.
-        """
-        contribution = ContributionService().get(id=contribution_id)
-        if contribution is None:
-            raise ValueError("Contribution not found")
-        if user != contribution.creator:
-            raise ValueError("You do not have permission to update this contribution")
-        if file:
-            contribution.profile = file
-            contribution.save()
-        normalized_data = {}
-
-        if "name" in kwargs:
-            new_name = str(kwargs["name"]).strip().title()
-            # Check if the new name already exists for user excluding current contribution
-            exists = ContributionService().filter(
-                creator=user,
-                name=new_name
-            ).exclude(id=contribution.id).exists()
-            if exists:
-                raise ValueError("Contribution name already exists")
-            normalized_data["name"] = new_name
-
-        if "description" in kwargs:
-            normalized_data["description"] = str(kwargs["description"]).strip().capitalize()
-
-        if "target_amount" in kwargs:
-            try:
-                normalized_data["target_amount"] = float(str(kwargs["target_amount"]).strip())
-            except (ValueError, TypeError):
-                raise ValueError("Invalid target amount")
-
-        if "end_date" in kwargs:
-            try:
-                normalized_data["end_date"] = parse(str(kwargs["end_date"]))
-            except (ValueError, TypeError):
-                raise ValueError("Invalid end date")
-        if "is_private" in kwargs:
-            try:
-                normalized_data["is_private"] = kwargs["is_private"]
-            except (ValueError, TypeError):
-                raise ValueError("Invalid end date")
-
-        updated_contribution = ContributionService().update(pk=contribution.id, **normalized_data)
-        
-        if not updated_contribution:
-            raise Exception("Failed to update contribution")
-
-        return updated_contribution
-
-    @staticmethod
-    def delete_contribution(user: User, contribution_id: str) -> Contribution:
-        """
-        Soft-delete a contribution by marking its status as INACTIVE.
-
-        :param user: The user attempting to delete; must be the creator.
-        :type user: User
-        :param contribution_id: The UUID or string identifier of the contribution.
+        :param contribution_id: The unique identifier of the contribution.
         :type contribution_id: str
-        :raises ValueError: If the contribution is not found or usefiler lacks permission.
+        :param user: The user performing the update.
+        :type user: User
+        :param name: Updated contribution name, if provided.
+        :type name: str, optional
+        :param description: Updated contribution description, if provided.
+        :type description: str, optional
+        :param target_amount: Updated target amount, if provided.
+        :type target_amount: float, optional
+        :param end_date: Updated end date, if provided.
+        :type end_date: str, optional
+        :param is_private: Updated privacy flag.
+        :type is_private: bool, optional
+        :param photo: Updated contribution photo.
+        :type photo: UploadedFile, optional
+        :raises PermissionDenied: If the user is not the creator.
+        :raises ValidationError: If input data is invalid.
+        :return: The updated contribution instance.
+        :rtype: Contribution
+        """
+        contribution = cls.get_contribution(contribution_id)
+
+        if contribution.creator != user:
+            raise PermissionDenied("You are not allowed to update this contribution")
+
+        # Normalize and validate fields
+        if name is not None:
+            name = name.strip().title()
+            if not name:
+                raise ValidationError("Contribution name cannot be empty")
+            contribution.name = name
+
+        if description is not None:
+            contribution.description = description.strip()
+
+        if target_amount is not None:
+            try:
+                contribution.target_amount = float(str(target_amount).strip())
+            except (ValueError, TypeError):
+                raise ValidationError("Invalid target amount value")
+
+        if end_date is not None:
+            try:
+                contribution.end_date = parse(end_date)
+            except Exception:
+                raise ValidationError("Invalid end date format")
+
+        if is_private is not None:
+            contribution.is_private = bool(is_private)
+
+        if photo is not None:
+            contribution.profile = photo
+
+        # Persist changes
+        contribution.save()
+
+        return contribution
+
+    @classmethod
+    @transaction.atomic
+    def delete_contribution(cls, user: User, contribution_id: str) -> Contribution:
+        """
+        Soft-delete a contribution by marking its status as inactive.
+
+        :param user: The user performing the deletion.
+        :type user: User
+        :param contribution_id: The unique identifier of the contribution.
+        :type contribution_id: str
+        :raises PermissionDenied: If the user is not the creator.
+        :raises ValidationError: If the contribution is already inactive.
         :return: The contribution instance marked as inactive.
         :rtype: Contribution
         """
-        contribution = ContributionService().get(id=contribution_id)
-        if contribution is None:
-            raise ValueError('Contribution not found')
+        contribution = cls.get_contribution(contribution_id)
 
-        if not user == contribution.creator:
-            raise ValueError('You do not have permission to delete this contribution')
+        if contribution.creator != user:
+            raise PermissionDenied("You are not allowed to delete this contribution")
+
+        if contribution.status == Contribution.Status.INACTIVE:
+            raise ValidationError("This contribution is already inactive")
 
         contribution.status = Contribution.Status.INACTIVE
-        contribution.save()
+        contribution.save(update_fields=["status"])
+
         return contribution
 
-    @staticmethod
-    def get_contribution(contribution_id: str) -> dict:
+    @classmethod
+    def fetch_contribution(cls, contribution_id: str) -> dict:
         """
-        Retrieve a contribution as a dictionary.
+        Retrieve full contribution details, including wallet and transactions.
 
-        Automatically updates contribution status before returning.
-
-        :param contribution_id: The UUID or string ID of the contribution.
+        :param contribution_id: The unique identifier of the contribution.
         :type contribution_id: str
-        :raises ValueError: If contribution is not found.
-        :return: Contribution data as a dictionary.
+        :raises ObjectDoesNotExist: If the contribution is not found or inactive.
+        :return: A dictionary with contribution, wallet, and transaction details.
         :rtype: dict
         """
-        contribution = ContributionService().get(id=contribution_id)
-        if contribution is None:
-            raise ValueError('Contribution not found')
+        contribution = cls.get_contribution(contribution_id)
 
         # Update status
         contribution.update_status()
 
         # Convert contribution model instance to dict
         contribution_dict = model_to_dict(contribution)
+
+        # Add contribution photo url
         if contribution.profile:
             contribution_dict['profile'] = settings.MEDIA_URL + str(contribution.profile)
 
@@ -259,38 +312,43 @@ class ContributionManagementService:
 
         return contribution_data
 
-    @staticmethod
+    @classmethod
     def filter_contributions(
-            search_term: str = "",
-            creator_id: str | None = None,
-            status: str | None = None,
-            start_date: str | None = None,
-            end_date: str | None = None,
-            is_public: bool = False,
+            cls,
+            user: Optional[User] = None,
+            creator_id: Optional[str] = None,
+            search_term: Optional[str] = None,
+            status: Optional[str] = None,
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
+            is_private: Optional[bool] = None,
             queryset: bool = False,
     ) -> Union[QuerySet, list[dict]]:
         """
-        Filter and retrieve contributions based on search criteria.
+        Filter contributions based on search, date, creator, and visibility criteria.
 
-        Automatically updates statuses using `update_contribution_status`.
-
-        :param search_term: Search string to match contribution fields and creator info.
-        :type search_term: str
+        :param user: The user performing the query.
+        :type user: User, optional
         :param creator_id: Filter contributions by creator ID.
-        :type creator_id: str | None
-        :param status: Filter contributions by status.
-        :type status: str | None
-        :param start_date: Filter contributions created on or after this date (YYYY-MM-DD).
-        :type start_date: str | None
-        :param end_date: Filter contributions created on or before this date (YYYY-MM-DD).
-        :type end_date: str | None
-        :param queryset: If True, returns a QuerySet; else returns a list of dicts.
-        :type queryset: bool
+        :type creator_id: str, optional
+        :param search_term: Text to search across name, description, and creator info.
+        :type search_term: str, optional
+        :param status: Filter by contribution status.
+        :type status: str, optional
+        :param start_date: Minimum creation date (inclusive).
+        :type start_date: str, optional
+        :param end_date: Maximum creation date (inclusive).
+        :type end_date: str, optional
+        :param is_private: Privacy filter. None shows both user’s private and public.
+        :type is_private: bool, optional
+        :param queryset: Whether to return a QuerySet instead of a list.
+        :type queryset: bool, optional
         :return: Filtered contributions as a QuerySet or list of dicts.
-        :rtype: QuerySet[Contribution] | list[dict]
+        :rtype: Union[QuerySet, list[dict]]
         """
         filters = Q()
 
+        # Text search
         if search_term:
             filters &= Q(
                 Q(name__icontains=search_term) |
@@ -311,9 +369,17 @@ class ContributionManagementService:
 
         if end_date:
             filters &= Q(date_created__date__lte=end_date)
-        print(is_public)
-        if is_public:
+
+        if is_private:
+            filters &= Q(is_private=True)
+        elif is_private is False:
             filters &= Q(is_private=False)
+        else:
+            visibility_filter = Q(is_private=False)
+            if user:
+                visibility_filter |= Q(is_private=True, creator=user)
+            filters &= visibility_filter
+
         contributions = (
             ContributionService()
             .filter(filters)
@@ -334,8 +400,18 @@ class ContributionManagementService:
                 )
             )
         )
+
+        # Update contribution statuses
         for contribution in contributions:
             contribution.update_status()
+
         if queryset:
             return contributions
-        return list(contributions.values())
+
+        # Add photo urls
+        contributions = list(contributions.values())
+        for contribution in contributions:
+            if contribution.get("profile"):
+                contribution["profile"] = f"{settings.MEDIA_URL}{contribution['profile']}"
+
+        return contributions
