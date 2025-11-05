@@ -89,6 +89,9 @@ class GatewayControlMiddleware:
             self.AUTHENTICATION_REQUIRED = callback.require_authentication
             self.SIGNATURE_VERIFICATION_REQUIRED = callback.require_signature_verification
 
+        if any(request.path.startswith(p) for p in self.API_CLIENT_VALIDATION_EXEMPT_PATHS):
+            self.AUTHENTICATION_REQUIRED = False
+
         if self.AUTHENTICATION_REQUIRED:
             response = self._validate_api_client(request)
             if response:
@@ -218,8 +221,6 @@ class GatewayControlMiddleware:
 
     def _validate_api_client(self, request):
         request.api_client = None
-        if any(request.path.startswith(p) for p in self.API_CLIENT_VALIDATION_EXEMPT_PATHS):
-            return None
 
         api_key = request.headers.get(self.API_KEY_HEADER)
         if not api_key:
