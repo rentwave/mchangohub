@@ -50,8 +50,8 @@ class RequestLogAdmin(admin.ModelAdmin):
         'colored_status', 'request_path', 'started_at', 'time_taken', 'related_audits_link'
     )
     list_filter = (
-        RequestPathCategoryFilter, 'is_authenticated', 'request_method', 'is_secure', 'activity_name',
-        'response_status', 'started_at'
+        RequestPathCategoryFilter, 'api_client', 'is_authenticated', 'request_method',
+        'is_secure', 'activity_name', 'response_status', 'started_at'
     )
     search_fields = (
         'request_id', 'api_client__name', 'user__username', 'token', 'ip_address', 'session_key',
