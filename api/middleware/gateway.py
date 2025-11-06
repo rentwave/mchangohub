@@ -31,10 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class GatewayControlMiddleware:
-    REQUIRED_HEADERS = ["X-Api-Key"]
-
     API_KEY_HEADER = "X-Api-Key"
-    SIGNATURE_HEADER = "X-Signature"
     ENCRYPTED_HEADER = "X-Encrypted"
 
     API_CLIENT_VALIDATION_EXEMPT_PATHS = [
@@ -48,18 +45,20 @@ class GatewayControlMiddleware:
 
     SAVE_REQUEST_LOG_EXEMPT_PATHS = []
 
-    AUTHENTICATION_REQUIRED = True
-    SIGNATURE_VERIFICATION_REQUIRED = False
     ENCRYPTED = False
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
+        self.ENCRYPTED = request.headers.get(self.ENCRYPTED_HEADER) == "1"
+
+        authentication_required = True
+        signature_verification_required = False
+
         if request.path.startswith("/api/"):
             request._dont_enforce_csrf_checks = True
 
-        self.ENCRYPTED = request.headers.get(self.ENCRYPTED_HEADER) == "1"
         if self.ENCRYPTED:
             request = self._decrypt_request_body(request)
 
@@ -86,21 +85,21 @@ class GatewayControlMiddleware:
             request.api_client = callback.client
             RequestContext.update(api_client=request.api_client)
 
-            self.AUTHENTICATION_REQUIRED = callback.require_authentication
-            self.SIGNATURE_VERIFICATION_REQUIRED = callback.require_signature_verification
+            authentication_required = callback.require_authentication
+            signature_verification_required = callback.client.require_signature_verification
 
         if any(request.path.startswith(p) for p in self.API_CLIENT_VALIDATION_EXEMPT_PATHS):
-            self.AUTHENTICATION_REQUIRED = False
+            authentication_required = False
 
-        if self.AUTHENTICATION_REQUIRED:
+        if authentication_required:
             response = self._validate_api_client(request)
             if response:
                 return self._process_response(request, response)
 
             RequestContext.update(api_client=request.api_client)
-            self.SIGNATURE_VERIFICATION_REQUIRED = request.api_client.require_signature_verification
+            signature_verification_required = request.api_client.require_signature_verification
 
-        if self.SIGNATURE_VERIFICATION_REQUIRED:
+        if signature_verification_required:
             response = self._verify_signature(request)
             if response:
                 return self._process_response(request, response)

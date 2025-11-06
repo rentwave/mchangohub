@@ -30,7 +30,6 @@ class ApiCallbackInline(admin.TabularInline):
     fields = (
         'path',
         'require_authentication',
-        'require_signature_verification',
         'is_active',
     )
     readonly_fields = ('date_created', 'date_modified')
@@ -121,11 +120,10 @@ class APICallbackAdmin(admin.ModelAdmin):
         'client',
         'path',
         'require_authentication',
-        'require_signature_verification',
         'is_active',
         'date_created',
     )
-    list_filter = ('require_authentication', 'require_signature_verification', 'is_active')
+    list_filter = ('require_authentication', 'is_active')
     search_fields = ('path', 'client__name')
     readonly_fields = ('date_created', 'date_modified')
 
@@ -134,7 +132,7 @@ class APICallbackAdmin(admin.ModelAdmin):
             'fields': ('client', 'path', 'is_active')
         }),
         ('Security', {
-            'fields': ('require_authentication', 'require_signature_verification')
+            'fields': ('require_authentication',)
         }),
         ('Timestamps', {
             'fields': ('date_created', 'date_modified')

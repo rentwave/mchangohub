@@ -142,10 +142,6 @@ class APICallback(BaseModel):
         default=False,
         help_text="If True, the callback requires API key authentication."
     )
-    require_signature_verification = models.BooleanField(
-        default=False,
-        help_text="If True, incoming requests must include a valid cryptographic signature."
-    )
     is_active = models.BooleanField(
         default=True,
         help_text="Indicates whether this callback is active."
